@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cost Curve - Smart Price Comparison</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="container">
+            <div class="nav-brand">
+                <h1><i class="fas fa-chart-line"></i> Cost Curve</h1>
+                <p class="tagline">Strike the Best Deals with Smart Price Tracking</p>
+            </div>
+            <nav class="nav-menu">
+                <a href="#home" class="nav-link active">Home</a>
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#login" class="nav-link" id="loginBtn">Login</a>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Hero Section -->
+        <section class="hero" id="home">
+            <div class="container">
+                <h2>Find the Best Deals Across All Platforms</h2>
+                <p>Track prices, predict trends, and never miss a great deal again</p>
+                
+                <!-- Search Form -->
+                <div class="search-section">
+                    <div class="search-input-group">
+                        <input type="url" id="productUrl" placeholder="Paste product URL or enter search term..." class="search-input">
+                        <button type="button" id="searchBtn" class="search-btn">
+                            <i class="fas fa-search"></i> Track Price
+                        </button>
+                    </div>
+                    <div class="search-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="enableAlerts"> Enable price alerts
+                        </label>
+                        <input type="number" id="budgetInput" placeholder="Set budget (₹)" class="budget-input">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Results Section -->
+        <section class="results-section" id="results" style="display: none;">
+            <div class="container">
+                <h3>Price Comparison Results</h3>
+                <div class="results-grid" id="resultsGrid">
+                    <!-- Results will be dynamically inserted here -->
+                </div>
+                
+                <!-- Price Chart -->
+                <div class="chart-section">
+                    <h4>Price History & Prediction</h4>
+                    <div class="chart-container">
+                        <canvas id="priceChart"></canvas>
+                    </div>
+                    <div class="deal-score">
+                        <h4>Deal Score</h4>
+                        <div class="score-display" id="dealScore">
+                            <span class="score-number">0.0</span>
+                            <span class="score-label">/10</span>
+                        </div>
+                        <p class="score-description" id="scoreDescription">Enter a product to see deal analysis</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Features Section -->
+        <section class="features-section" id="features">
+            <div class="container">
+                <h3>Why Choose Cost Curve?</h3>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <i class="fas fa-chart-area"></i>
+                        <h4>Predictive Analytics</h4>
+                        <p>AI-powered price predictions help you decide when to buy</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-shopping-cart"></i>
+                        <h4>Total Cost Analysis</h4>
+                        <p>See complete costs including shipping, taxes, and duties</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-bell"></i>
+                        <h4>Smart Alerts</h4>
+                        <p>Get notified when prices drop or products are back in stock</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-star"></i>
+                        <h4>Deal Score</h4>
+                        <p>Proprietary scoring system to rate deal quality</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-tags"></i>
+                        <h4>Multi-Platform</h4>
+                        <p>Compare prices across fashion, electronics, travel, and more</p>
+                    </div>
+                    <div class="feature-card">
+                        <i class="fas fa-user-cog"></i>
+                        <h4>Personalized Budget</h4>
+                        <p>Set budgets and get recommendations within your limits</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Login Modal -->
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <span class="close" id="closeModal">&times;</span>
+            <h3>Login to Cost Curve</h3>
+            <form class="login-form" id="loginForm">
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                <button type="submit" class="login-submit-btn">Login</button>
+                <p class="signup-link">Don't have an account? <a href="#" id="signupLink">Sign up</a></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Loading Spinner -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <p>Analyzing prices across platforms...</p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2025 Cost Curve. Smart shopping made simple.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
