@@ -1,0 +1,275 @@
+/* App-specific styles */
+
+.App {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Notification System */
+.notification-container {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.notification {
+  background: white;
+  border-radius: 10px;
+  padding: 1rem 1.5rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  border-left: 4px solid #667eea;
+  animation: slideInRight 0.3s ease, fadeOut 0.3s ease 4.7s;
+  max-width: 400px;
+  word-wrap: break-word;
+  position: relative;
+  cursor: pointer;
+}
+
+.notification.success {
+  border-left-color: #27ae60;
+}
+
+.notification.error {
+  border-left-color: #e74c3c;
+}
+
+.notification.warning {
+  border-left-color: #f39c12;
+}
+
+.notification.info {
+  border-left-color: #3498db;
+}
+
+.notification-close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: #666;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+.notification-close:hover {
+  color: #333;
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+/* Loading Overlay */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(5px);
+  z-index: 4000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  color: white;
+}
+
+.loading-overlay .spinner {
+  width: 60px;
+  height: 60px;
+  border-width: 5px;
+  margin-bottom: 1rem;
+}
+
+.loading-overlay p {
+  font-size: 1.1rem;
+  font-weight: 500;
+}
+
+/* Page Transitions */
+.page-enter {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.page-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 300ms, transform 300ms;
+}
+
+.page-exit {
+  opacity: 1;
+}
+
+.page-exit-active {
+  opacity: 0;
+  transition: opacity 300ms;
+}
+
+/* Error Boundary */
+.error-boundary {
+  text-align: center;
+  padding: 3rem;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  margin: 2rem auto;
+  max-width: 600px;
+}
+
+.error-boundary h2 {
+  color: #e74c3c;
+  margin-bottom: 1rem;
+}
+
+.error-boundary p {
+  color: #666;
+  margin-bottom: 2rem;
+}
+
+.error-boundary .btn {
+  background: #667eea;
+}
+
+/* Accessibility */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Skip Link */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 6px;
+  background: #667eea;
+  color: white;
+  padding: 8px;
+  border-radius: 4px;
+  text-decoration: none;
+  font-weight: 600;
+  z-index: 5000;
+  transition: top 0.3s;
+}
+
+.skip-link:focus {
+  top: 6px;
+}
+
+/* Print Styles */
+@media print {
+  .header,
+  .footer,
+  .notification-container,
+  .loading-overlay,
+  button,
+  .btn {
+    display: none !important;
+  }
+  
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .card {
+    box-shadow: none !important;
+    border: 1px solid #ccc !important;
+  }
+}
+
+/* High Contrast Mode */
+@media (prefers-contrast: high) {
+  .card {
+    border: 2px solid #000;
+  }
+  
+  .btn {
+    border: 2px solid #000;
+  }
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Dark Mode Support (Future Enhancement) */
+@media (prefers-color-scheme: dark) {
+  /* Dark mode styles can be added here */
+}
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+  .notification-container {
+    top: 70px;
+    right: 10px;
+    left: 10px;
+  }
+  
+  .notification {
+    max-width: none;
+  }
+}
+
+/* Very small screens */
+@media (max-width: 320px) {
+  .notification {
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+  }
+}
+
+/* Landscape phone orientation */
+@media (max-height: 500px) and (orientation: landscape) {
+  .notification-container {
+    top: 10px;
+  }
+}

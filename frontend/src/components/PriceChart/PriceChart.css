@@ -1,0 +1,101 @@
+.price-chart {
+  width: 100%;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  margin: 20px 0;
+}
+
+.chart-header {
+  margin-bottom: 20px;
+}
+
+.price-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.current-price {
+  font-size: 24px;
+  font-weight: bold;
+  color: #111827;
+}
+
+.price-change {
+  font-size: 14px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.price-change.positive {
+  background-color: #dcfce7;
+  color: #16a34a;
+}
+
+.price-change.negative {
+  background-color: #fef2f2;
+  color: #dc2626;
+}
+
+.chart-container {
+  height: 300px;
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.chart-footer {
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+}
+
+.chart-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.insight {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.insight-label {
+  font-size: 12px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.insight-value {
+  font-size: 16px;
+  color: #111827;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .price-chart {
+    padding: 16px;
+  }
+  
+  .chart-container {
+    height: 250px;
+  }
+  
+  .current-price {
+    font-size: 20px;
+  }
+  
+  .chart-insights {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .insight {
+    padding: 8px;
+    background: #f9fafb;
+    border-radius: 8px;
+  }
+}
