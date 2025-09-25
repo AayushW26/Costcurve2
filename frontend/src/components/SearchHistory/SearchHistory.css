@@ -1,0 +1,102 @@
+/* Enhanced Search History Styles */
+.search-history-container {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(44, 62, 80, 0.10);
+  padding: 2.2rem 2rem 1.5rem 2rem;
+  margin-bottom: 2.5rem;
+  margin-top: 1.5rem;
+  transition: box-shadow 0.2s;
+}
+
+.search-history-container:hover {
+  box-shadow: 0 8px 32px rgba(44, 62, 80, 0.16);
+}
+
+.search-history-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.2rem;
+  color: #2d3748;
+  letter-spacing: 0.5px;
+}
+
+.search-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.2rem;
+}
+
+.search-history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.search-history-item {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  border-bottom: 1px solid #f1f1f1;
+  padding: 1.1rem 0;
+  transition: background 0.15s;
+}
+
+.search-history-item:last-child {
+  border-bottom: none;
+}
+
+.search-history-query {
+  font-weight: 600;
+  color: #3182ce;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.search-history-date {
+  font-size: 0.98rem;
+  color: #718096;
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+.search-history-filters {
+  font-size: 0.98rem;
+  color: #4a5568;
+  background: #f7fafc;
+  border-radius: 6px;
+  padding: 0.2em 0.7em;
+  margin-left: 0.5em;
+}
+
+.clear-history-btn {
+  background: linear-gradient(90deg, #ff5858 0%, #f857a6 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5em 1.3em;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+  margin-left: 1em;
+  box-shadow: 0 2px 8px rgba(248, 87, 166, 0.08);
+}
+.clear-history-btn:hover {
+  background: linear-gradient(90deg, #e53e3e 0%, #b83280 100%);
+  box-shadow: 0 4px 16px rgba(248, 87, 166, 0.16);
+}
+
+@media (max-width: 600px) {
+  .search-history-container {
+    padding: 1.2rem 0.5rem;
+  }
+  .search-history-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+}

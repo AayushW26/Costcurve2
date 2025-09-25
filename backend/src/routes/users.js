@@ -1,13 +1,11 @@
 const express = require('express');
 const router = express.Router();
 
-// Users routes placeholder
+// Example: Get user profile (mock)
 router.get('/profile', (req, res) => {
-  res.json({ message: 'User profile endpoint - to be implemented' });
+  res.json({ success: true, user: { id: 1, username: 'testuser', email: 'test@example.com' } });
 });
 
-router.put('/profile', (req, res) => {
-  res.json({ message: 'Update user profile endpoint - to be implemented' });
-});
+// TODO: Add more user-related endpoints as needed
 
 module.exports = router;

@@ -32,7 +32,7 @@ const ProductCard = ({ product }) => {
       return;
     }
 
-    const isAlreadyInWatchlist = user.watchlist?.some(item => item.id === product.id);
+    const isAlreadyInWatchlist = user && user.watchlist?.some(item => item.id === product.id);
     
     if (isAlreadyInWatchlist) {
       showNotification('Item already in watchlist', 'info');
@@ -42,6 +42,16 @@ const ProductCard = ({ product }) => {
     const updatedWatchlist = [...(user.watchlist || []), product];
     updateUser({ watchlist: updatedWatchlist });
     showNotification(`${product.title || product.name} added to watchlist!`, 'success');
+  };
+
+  const handleRemoveFromWatchlist = () => {
+    if (!isAuthenticated) {
+      showNotification('Please login to remove items from watchlist', 'warning');
+      return;
+    }
+    const updatedWatchlist = user.watchlist.filter(item => item.id !== product.id);
+    updateUser({ watchlist: updatedWatchlist });
+    showNotification(`${product.title || product.name} removed from watchlist!`, 'info');
   };
 
   const getStockStatus = () => {
@@ -55,6 +65,7 @@ const ProductCard = ({ product }) => {
   };
 
   const stockStatus = getStockStatus();
+  const isAlreadyInWatchlist = user && user.watchlist?.some(item => item.id === product.id);
 
   return (
     <div className="product-card">
@@ -123,14 +134,24 @@ const ProductCard = ({ product }) => {
         >
           {product.inStock ? 'View Deal' : 'Notify When Available'}
         </button>
-        
-        <button
-          onClick={handleAddToWatchlist}
-          className="watchlist-btn"
-        >
-          <i className="fas fa-eye"></i>
-          Add to Watchlist
-        </button>
+        {isAlreadyInWatchlist ? (
+          <button
+            onClick={handleRemoveFromWatchlist}
+            className="watchlist-btn remove"
+            style={{ background: '#e53e3e', color: '#fff' }}
+          >
+            <i className="fas fa-times-circle"></i>
+            Remove from Watchlist
+          </button>
+        ) : (
+          <button
+            onClick={handleAddToWatchlist}
+            className="watchlist-btn"
+          >
+            <i className="fas fa-eye"></i>
+            Add to Watchlist
+          </button>
+        )}
       </div>
     </div>
   );

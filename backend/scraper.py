@@ -32,8 +32,8 @@ class ProductScraper:
         })
         self.results = []
         
-    def add_random_delay(self, min_delay=1, max_delay=3):
-        """Add random delay to avoid being blocked"""
+    def add_random_delay(self, min_delay=0.1, max_delay=0.3):
+        """Add random delay to avoid being blocked (reduced for speed)"""
         time.sleep(random.uniform(min_delay, max_delay))
     
     def _get_category_base_price(self, query):
@@ -455,10 +455,19 @@ class ProductScraper:
                             product_url = urljoin('https://www.amazon.in', href)
                             logger.info(f"🔗 [AMAZON] Product URL: {product_url}")
                         
-                        # Extract image
-                        img_elem = product.select_one('img.s-image, .a-dynamic-image')
-                        image_url = img_elem.get('src') or img_elem.get('data-src') if img_elem else None
-                        logger.info(f"🖼️ [AMAZON] Image URL: {image_url or 'Not found'}")
+                        # Extract image (robust)
+                        img_elem = product.select_one('img.s-image, img.a-dynamic-image, img, .a-dynamic-image')
+                        image_url = None
+                        if img_elem:
+                            # Try multiple possible attributes
+                            for attr in ['src', 'data-src', 'data-image-src', 'data-lazy', 'data-original', 'data-old-hires']:
+                                image_url = img_elem.get(attr)
+                                if image_url:
+                                    break
+                            # Convert relative URLs to absolute
+                            if image_url and image_url.startswith('/'):
+                                image_url = urljoin('https://www.amazon.in', image_url)
+                        logger.info(f"🖼️ [AMAZON] Image URL for product #{idx}: {image_url if image_url else 'Not found'}")
                         
                         if title and price:
                             # Filter out accessories

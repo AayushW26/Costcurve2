@@ -3,6 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import ProductCard from '../../components/ProductCard/ProductCard';
 import PriceChart from '../../components/PriceChart/PriceChart';
 import SavingsChart from '../../components/SavingsChart/SavingsChart';
+import SearchHistory from '../../components/SearchHistory/SearchHistory';
 import './Dashboard.css';
 
 const Dashboard = () => {
@@ -30,6 +31,9 @@ const Dashboard = () => {
           <h2>Welcome back, {user.username}! 👋</h2>
           <p>Manage your watchlist, alerts, and price tracking</p>
         </div>
+
+        {/* Search History Section */}
+        <SearchHistory />
 
         {/* Stats Cards */}
         <div className="stats-grid">
