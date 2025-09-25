@@ -359,11 +359,311 @@ class ProductScraper:
         
         self.add_random_delay()
 
+    def scrape_amazon(self, query):
+        """Scrape Amazon India with mobile headers to bypass blocking"""
+        logger.info(f"🔍 [AMAZON] Starting scrape for: {query}")
+        
+        # Use mobile User-Agent that works better with Amazon
+        mobile_headers = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+        }
+        
+        search_url = f"https://www.amazon.in/s?k={quote_plus(query)}&ref=sr_pg_1"
+        logger.info(f"🌐 [AMAZON] Search URL: {search_url}")
+        
+        try:
+            response = self.session.get(search_url, headers=mobile_headers, timeout=10)
+            logger.info(f"✅ [AMAZON] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Amazon product selectors
+                product_selectors = [
+                    '[data-component-type="s-search-result"]',
+                    '.s-result-item',
+                    '[data-asin]'
+                ]
+                
+                products = []
+                for selector in product_selectors:
+                    products = soup.select(selector)
+                    if len(products) > 0:
+                        break
+                
+                logger.info(f"🎯 [AMAZON] Found {len(products)} product containers")
+                
+                for idx, product in enumerate(products[:5], 1):  # Limit to 5 products
+                    try:
+                        logger.info(f"📦 [AMAZON] Processing product #{idx}")
+                        
+                        # Extract title - improved selectors
+                        title = None
+                        title_selectors = [
+                            'h2 a span',  # Main title in link
+                            '.a-size-medium span',  # Medium size title
+                            '[data-cy="title-recipe-title"]',  # Recipe title
+                            'h2 span',  # Direct h2 span
+                            '.s-title-instructions-style span',  # Instructions style
+                            '.a-text-normal',  # Normal text style
+                            '[data-index] h2 a span'  # Indexed results
+                        ]
+                        
+                        for selector in title_selectors:
+                            try:
+                                title_elem = product.select_one(selector)
+                                if title_elem:
+                                    potential_title = title_elem.get_text(strip=True)
+                                    # Skip generic sponsored/ad titles
+                                    if potential_title and potential_title.lower() not in ['sponsored', 'advertisement', 'ad', '']:
+                                        title = potential_title
+                                        break
+                            except:
+                                continue
+                        
+                        logger.info(f"📝 [AMAZON] Title extracted: '{title}'")
+                        
+                        # Extract price
+                        price = None
+                        price_selectors = [
+                            '.a-price-whole',
+                            '.a-price .a-offscreen',
+                            '.a-price-symbol + .a-price-whole',
+                            '[aria-label*="price"] .a-price-whole'
+                        ]
+                        
+                        for price_selector in price_selectors:
+                            price_elem = product.select_one(price_selector)
+                            if price_elem:
+                                price_text = price_elem.get_text(strip=True)
+                                price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                                if price_match:
+                                    price = int(price_match.group().replace(',', ''))
+                                    logger.info(f"💵 [AMAZON] Final price: ₹{price}")
+                                    break
+                        
+                        # Extract URL
+                        link_elem = product.select_one('h2 a, .a-link-normal')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            product_url = urljoin('https://www.amazon.in', href)
+                            logger.info(f"🔗 [AMAZON] Product URL: {product_url}")
+                        
+                        # Extract image
+                        img_elem = product.select_one('img.s-image, .a-dynamic-image')
+                        image_url = img_elem.get('src') or img_elem.get('data-src') if img_elem else None
+                        logger.info(f"🖼️ [AMAZON] Image URL: {image_url or 'Not found'}")
+                        
+                        if title and price:
+                            # Filter out accessories
+                            title_lower = title.lower()
+                            is_accessory = any(word in title_lower for word in [
+                                'cover', 'case', 'protector', 'screen guard', 'charger', 
+                                'cable', 'headphone', 'earphone', 'stand', 'holder',
+                                'selfie stick', 'tripod', 'mount', 'adapter', 'battery',
+                                'power bank', 'tempered glass', 'lens', 'clip', 'ring'
+                            ])
+                            
+                            if is_accessory:
+                                logger.info(f"🚫 [AMAZON] Filtered out accessory: {title[:50]}... at ₹{price}")
+                                continue
+                            
+                            result_data = {
+                                'platform': 'Amazon',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'In Stock'
+                            }
+                            self.results.append(result_data)
+                            logger.info(f"✅ [AMAZON] Added main product: {title[:50]}... at ₹{price}")
+                        else:
+                            logger.warning(f"❌ [AMAZON] Skipped product #{idx}: title='{title}', price={price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [AMAZON] Error parsing product #{idx}: {e}")
+                        continue
+                        
+            else:
+                logger.warning(f"⚠️ [AMAZON] Non-200 response: {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Error scraping Amazon: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_flipkart(self, query):
+        """Scrape Flipkart with mobile headers"""
+        logger.info(f"🔍 [FLIPKART] Starting scrape for: {query}")
+        
+        # Mobile headers for Flipkart
+        mobile_headers = {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+        }
+        
+        search_url = f"https://www.flipkart.com/search?q={quote_plus(query)}"
+        logger.info(f"🌐 [FLIPKART] Search URL: {search_url}")
+        
+        try:
+            response = self.session.get(search_url, headers=mobile_headers, timeout=10)
+            logger.info(f"✅ [FLIPKART] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Debug: Check if page is loading properly
+                if "flipkart" not in soup.get_text().lower():
+                    logger.warning("⚠️ [FLIPKART] Page might not be loading properly - no flipkart text found")
+                
+                # Updated Flipkart product selectors (2024/2025)
+                product_selectors = [
+                    '[data-id]',  # Main product containers
+                    '._1AtVbE',   # Product cards
+                    '._2kHMtA',   # Individual items
+                    '._13oc-S',   # Search results
+                    '[data-tkid]', # Tracking ID items
+                    '._2-gKeQ',   # Alternative containers
+                    '._1fQZEK',   # Product tiles
+                    '.cPHDOP'     # Newer containers
+                ]
+                
+                products = []
+                for selector in product_selectors:
+                    products = soup.select(selector)
+                    if len(products) > 0:
+                        logger.info(f"🎯 [FLIPKART] Found {len(products)} products with selector: {selector}")
+                        break
+                
+                # If no products found, try broader search
+                if len(products) == 0:
+                    logger.warning("⚠️ [FLIPKART] No products found with standard selectors, trying broader search")
+                    products = soup.select('div[data-id], div[class*="_"], a[href*="/p/"]')[:10]
+                
+                logger.info(f"🎯 [FLIPKART] Found {len(products)} product containers")
+                
+                for idx, product in enumerate(products[:5], 1):  # Limit to 5 products
+                    try:
+                        logger.info(f"📦 [FLIPKART] Processing product #{idx}")
+                        
+                        # Extract title - Updated selectors for 2024/2025
+                        title_selectors = [
+                            '._4rR01T',      # Main title class
+                            '.s1Q9rs',       # Alternative title
+                            '._2WkVRV',      # Product name
+                            '.IRpwTa',       # Item title
+                            'a[title]',      # Link title attribute
+                            '._2B099V',      # Updated title class
+                            '.KzDlHZ',       # Newer title selector
+                            '.wjcEIp'        # Alternative title
+                        ]
+                        
+                        title = None
+                        for title_selector in title_selectors:
+                            title_elem = product.select_one(title_selector)
+                            if title_elem:
+                                title = title_elem.get_text(strip=True) or title_elem.get('title')
+                                if title and len(title) > 3:  # Ensure we have meaningful title
+                                    break
+                        
+                        logger.info(f"📝 [FLIPKART] Title extracted: '{title}'")
+                        
+                        # Extract price - Updated selectors
+                        price = None
+                        price_selectors = [
+                            '._30jeq3',      # Main price class
+                            '._1_WHN1',      # Alternative price
+                            '.srp-x9y0c1',   # Search result price
+                            '._25b18c',      # Updated price class
+                            '._1vC4OE',      # Price container
+                            '.Nx9bqj',       # Current price
+                            '._3I9_wc'       # Price text
+                        ]
+                        
+                        for price_selector in price_selectors:
+                            price_elem = product.select_one(price_selector)
+                            if price_elem:
+                                price_text = price_elem.get_text(strip=True)
+                                price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                                if price_match:
+                                    price = int(price_match.group().replace(',', ''))
+                                    logger.info(f"💵 [FLIPKART] Final price: ₹{price}")
+                                    break
+                        
+                        # Extract URL
+                        link_elem = product.select_one('a[href]')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            product_url = urljoin('https://www.flipkart.com', href)
+                            logger.info(f"🔗 [FLIPKART] Product URL: {product_url}")
+                        
+                        # Extract image
+                        img_elem = product.select_one('img')
+                        image_url = img_elem.get('src') or img_elem.get('data-src') if img_elem else None
+                        logger.info(f"🖼️ [FLIPKART] Image URL: {image_url or 'Not found'}")
+                        
+                        if title and price:
+                            # Filter out accessories
+                            title_lower = title.lower()
+                            is_accessory = any(word in title_lower for word in [
+                                'cover', 'case', 'protector', 'screen guard', 'charger', 
+                                'cable', 'headphone', 'earphone', 'stand', 'holder',
+                                'selfie stick', 'tripod', 'mount', 'adapter', 'battery',
+                                'power bank', 'tempered glass', 'lens', 'clip', 'ring'
+                            ])
+                            
+                            if is_accessory:
+                                logger.info(f"🚫 [FLIPKART] Filtered out accessory: {title[:50]}... at ₹{price}")
+                                continue
+                            
+                            result_data = {
+                                'platform': 'Flipkart',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'In Stock'
+                            }
+                            self.results.append(result_data)
+                            logger.info(f"✅ [FLIPKART] Added main product: {title[:50]}... at ₹{price}")
+                        else:
+                            logger.warning(f"❌ [FLIPKART] Skipped product #{idx}: title='{title}', price={price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [FLIPKART] Error parsing product #{idx}: {e}")
+                        continue
+                        
+            else:
+                logger.warning(f"⚠️ [FLIPKART] Non-200 response: {response.status_code}")
+                
+        except Exception as e:
+            logger.error(f"Error scraping Flipkart: {e}")
+        
+        self.add_random_delay()
+
     def scrape_all(self, query):
-        """Scrape Indian e-commerce platforms with prioritized accessible sites"""
+        """Scrape Indian e-commerce platforms including major sites"""
         logger.info(f"Starting scrape for query: {query}")
         
-        # HIGH PRIORITY: Accessible sites with minimal anti-bot protection
+        # MAJOR PLATFORMS: Amazon and Flipkart with mobile headers
+        self.scrape_amazon(query)           # Amazon India - Using mobile headers ✅
+        self.scrape_flipkart(query)         # Flipkart - Using mobile headers ✅
+        
+        # ACCESSIBLE SITES: Minimal anti-bot protection
         self.scrape_naaptol(query)          # Naaptol - No anti-bot protection ✅
         self.scrape_shopsy(query)           # Shopsy - Flipkart's social commerce ✅
         self.scrape_snapdeal(query)         # Snapdeal - Sometimes accessible ✅
