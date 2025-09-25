@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
@@ -12,12 +13,28 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const productRoutes = require('./routes/products');
 const searchRoutes = require('./routes/search');
+
 const alertRoutes = require('./routes/alerts');
 const scrapingRoutes = require('./routes/scraping');
+const userDataRoutes = require('./routes/userData');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
 const { auth, optionalAuth } = require('./middleware/auth');
+
+
+// MongoDB connection
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/costcurve';
+mongoose.connect(MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+mongoose.connection.on('connected', () => {
+  console.log('✅ Connected to MongoDB');
+});
+mongoose.connection.on('error', (err) => {
+  console.error('❌ MongoDB connection error:', err);
+});
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -48,6 +65,9 @@ app.use('/api/', limiter);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
+
+// User data routes (search history, cart)
+app.use('/api/user', userDataRoutes);
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 

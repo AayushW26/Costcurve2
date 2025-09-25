@@ -100,8 +100,13 @@
 .stat-number {
   font-size: 2rem;
   font-weight: 700;
-  color: #333;
+  color: #000 !important;
   margin-bottom: 0.25rem;
+  background: none !important;
+  -webkit-background-clip: unset !important;
+  -webkit-text-fill-color: unset !important;
+  background-clip: unset !important;
+  text-shadow: none !important;
 }
 
 .stat-label {
