@@ -23,17 +23,39 @@ const errorHandler = require('./middleware/errorHandler');
 const { auth, optionalAuth } = require('./middleware/auth');
 
 
-// MongoDB connection
+// MongoDB connection with error handling
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/costcurve';
-mongoose.connect(MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+
+// Add connection timeout and error handling
+const connectToMongoDB = async () => {
+  try {
+    await mongoose.connect(MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+      connectTimeoutMS: 10000, // Give up initial connection after 10s
+    });
+    console.log('✅ Connected to MongoDB');
+  } catch (error) {
+    console.error('❌ MongoDB connection failed:', error.message);
+    console.log('⚠️  Server will continue running without database functionality');
+    console.log('📝 To fix: Update MONGODB_URI in .env or start MongoDB locally');
+  }
+};
+
+// Connect to MongoDB (non-blocking)
+connectToMongoDB();
+
 mongoose.connection.on('connected', () => {
-  console.log('✅ Connected to MongoDB');
+  console.log('✅ MongoDB connection established');
 });
+
 mongoose.connection.on('error', (err) => {
-  console.error('❌ MongoDB connection error:', err);
+  console.error('❌ MongoDB error:', err.message);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('⚠️  MongoDB disconnected');
 });
 
 const app = express();

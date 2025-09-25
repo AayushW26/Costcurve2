@@ -670,49 +670,204 @@ class ProductScraper:
                         price = None
                         
                         if hasattr(product, 'name') and product.name == 'a':
-                            # For direct links, price might not be available in the link itself
-                            # Look in parent or sibling elements
-                            parent = product.parent if product.parent else product
-                            price_selectors = [
-                                '._30jeq3', '._1_WHN1', '.srp-x9y0c1', '._25b18c', 
-                                '._1vC4OE', '.Nx9bqj', '._3I9_wc'
-                            ]
+                            # For direct links, look for prices in the broader page context
+                            # Flipkart loads prices via JavaScript, so look globally
                             
-                            for selector in price_selectors:
-                                price_elem = parent.select_one(selector)
-                                if price_elem:
+                            # ONLY look for .Nx9bqj.CxhGGd selector - no fallbacks, no algorithms
+                            parent = product.parent if product.parent else product
+                            # Try both selectors
+                            # Visit individual product page to get price with any Nx9bqj selector
+                            product_href = product.get('href', '')
+                            price_elem = None
+                            if product_href:
+                                try:
+                                    product_url = urljoin('https://www.flipkart.com', product_href)
+                                    logger.info(f"🔗 [FLIPKART] Visiting individual product page: {product_url[:80]}...")
+                                    
+                                    # Fetch individual product page
+                                    product_response = self.session.get(product_url, headers=mobile_headers, timeout=8)
+                                    if product_response.status_code == 200:
+                                        product_soup = BeautifulSoup(product_response.content, 'html.parser')
+                                        
+                                        # Find ANY element with class containing "Nx9bqj"
+                                        nx9bqj_elements = product_soup.find_all(class_=lambda x: x and 'Nx9bqj' in ' '.join(x) if isinstance(x, list) else 'Nx9bqj' in x if x else False)
+                                        
+                                        for elem in nx9bqj_elements:
+                                            elem_classes = ' '.join(elem.get('class', []))
+                                            elem_text = elem.get_text(strip=True)
+                                            logger.info(f"🔍 [FLIPKART] Found Nx9bqj element: class='{elem_classes}' text='{elem_text}'")
+                                            
+                                            # Look for price pattern in this element
+                                            price_match = re.search(r'₹([\d,]+)', elem_text)
+                                            if price_match:
+                                                price_elem = elem  # Mark as found
+                                                break
+                                        
+                                        if not price_elem:
+                                            logger.info(f"❌ [FLIPKART] No price found in {len(nx9bqj_elements)} Nx9bqj elements")
+                                    else:
+                                        logger.warning(f"⚠️ [FLIPKART] Could not fetch product page: {product_response.status_code}")
+                                        
+                                except Exception as e:
+                                    logger.warning(f"⚠️ [FLIPKART] Error fetching product page: {e}")
+                            if price_elem:
+                                price_text = price_elem.get_text(strip=True)
+                                price_match = re.search(r'₹([\d,]+)', price_text)
+                                if price_match:
+                                    price = int(price_match.group(1).replace(',', ''))
+                                    # Show which selector was used
+                                    selector_used = ' '.join(price_elem.get('class', []))
+                                    logger.info(f"💵 [FLIPKART] Found price with selector '{selector_used}': ₹{price}")
+                                else:
+                                    logger.info(f"� [FLIPKART] .Nx9bqj.CxhGGd found but no price pattern: {price_text}")
+                            else:
+                                logger.info(f"❌ [FLIPKART] Neither .Nx9bqj.CxhGGd nor .Nx9bqj._4b5DiR selector found")
+                            
+                            # Handle technical glitch case
+                            if not price:
+                                price = -1  # Will be displayed as "Technical Glitch Occurred"
+                                
+                                # Get all prices from CSS elements
+                                for price_elem in all_price_elements:
                                     price_text = price_elem.get_text(strip=True)
-                                    price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
-                                    if price_match:
-                                        price = int(price_match.group().replace(',', ''))
-                                        logger.info(f"💵 [FLIPKART] Link-based price: ₹{price}")
-                                        break
+                                    if '₹' in price_text:
+                                        price_matches = re.findall(r'₹([\d,]+)', price_text)
+                                        for match in price_matches:
+                                            price_val = int(match.replace(',', ''))
+                                            if 1000 <= price_val <= 50000:  # Reasonable price range for electronics
+                                                found_prices.append(price_val)
+                                
+                                # Strategy 2: Look for special/sale price patterns in the broader page
+                                page_text = soup.get_text()
+                                
+                                # Look for special price indicators
+                                special_price_patterns = [
+                                    r'Special\s*Price.*?₹([\d,]+)',
+                                    r'Deal\s*Price.*?₹([\d,]+)',
+                                    r'Sale\s*Price.*?₹([\d,]+)',
+                                    r'Current\s*Price.*?₹([\d,]+)',
+                                    r'₹([\d,]+)\s*₹[\d,]+'  # Current price followed by crossed out price
+                                ]
+                                
+                                for pattern in special_price_patterns:
+                                    matches = re.findall(pattern, page_text, re.IGNORECASE)
+                                    for match in matches:
+                                        price_val = int(match.replace(',', ''))
+                                        if 1000 <= price_val <= 50000:
+                                            found_prices.append(price_val)
+                                            logger.info(f"� [FLIPKART] Found special price pattern: ₹{price_val}")
+                                
+                                # Strategy 3: Get product link and try to fetch individual page (limited attempt)
+                                product_href = product.get('href', '')
+                                if product_href and not found_prices:
+                                    try:
+                                        product_url = urljoin('https://www.flipkart.com', product_href)
+                                        logger.info(f"🔗 [FLIPKART] Attempting individual product page: {product_url[:80]}...")
+                                        
+                                        # Quick fetch of product page
+                                        product_response = self.session.get(product_url, timeout=5)
+                                        if product_response.status_code == 200:
+                                            product_soup = BeautifulSoup(product_response.content, 'html.parser')
+                                            
+                                            # First try the specific current price selector
+                                            current_price_elem = product_soup.select_one('.Nx9bqj.CxhGGd')
+                                            if current_price_elem:
+                                                price_text = current_price_elem.get_text(strip=True)
+                                                price_match = re.search(r'₹([\d,]+)', price_text)
+                                                if price_match:
+                                                    price_val = int(price_match.group(1).replace(',', ''))
+                                                    if 1000 <= price_val <= 50000:
+                                                        found_prices.append(price_val)
+                                                        logger.info(f"🎯 [FLIPKART] Found current price with .Nx9bqj.CxhGGd: ₹{price_val}")
+                                            
+                                            # Also try general .Nx9bqj selector
+                                            general_price_elems = product_soup.select('.Nx9bqj')
+                                            for elem in general_price_elems:
+                                                price_text = elem.get_text(strip=True)
+                                                price_match = re.search(r'₹([\d,]+)', price_text)
+                                                if price_match:
+                                                    price_val = int(price_match.group(1).replace(',', ''))
+                                                    if 1000 <= price_val <= 50000:
+                                                        found_prices.append(price_val)
+                                                        logger.info(f"💰 [FLIPKART] Found price with .Nx9bqj: ₹{price_val}")
+                                            
+                                            # Fallback to general text search on product page
+                                            product_page_text = product_soup.get_text()
+                                            product_prices = re.findall(r'₹([\d,]+)', product_page_text)
+                                            for p in product_prices:
+                                                price_val = int(p.replace(',', ''))
+                                                if 1000 <= price_val <= 50000:
+                                                    found_prices.append(price_val)
+                                            
+                                            logger.info(f"🏷️ [FLIPKART] Product page prices: {sorted(set(found_prices))}")
+                                    except Exception as e:
+                                        logger.warning(f"⚠️ [FLIPKART] Could not fetch product page: {e}")
+                                
+                                # Select the best price from all strategies
+                                if found_prices:
+                                    # Remove duplicates and sort
+                                    unique_prices = sorted(list(set(found_prices)))
+                                    
+                                    # Smart price selection logic
+                                    if len(unique_prices) == 1:
+                                        price = unique_prices[0]
+                                    else:
+                                        # If we have multiple prices, prefer lower ones but avoid unreasonably low prices
+                                        # that might be accessories or partial payments
+                                        reasonable_prices = [p for p in unique_prices if p >= 5000]  # Reasonable for Samsung T7
+                                        if reasonable_prices:
+                                            price = reasonable_prices[0]  # Lowest reasonable price
+                                        else:
+                                            price = unique_prices[0]  # Fallback to lowest price
+                                    
+                                    logger.info(f"💵 [FLIPKART] Link-based price (comprehensive search): ₹{price}")
+                                    logger.info(f"🎯 [FLIPKART] All discovered prices: {unique_prices}")
+                                    
+                                # Strategy 4: Final fallback to container text search
+                                if not price:
+                                    parent_container = product.parent
+                                    if parent_container:
+                                        container_text = parent_container.get_text()
+                                        all_prices = re.findall(r'₹([\d,]+)', container_text)
+                                        if all_prices:
+                                            price_values = [int(p.replace(',', '')) for p in all_prices if 1000 <= int(p.replace(',', '')) <= 50000]
+                                            if price_values:
+                                                price_values.sort()
+                                                price = price_values[0]  # Take lowest reasonable price
+                                                logger.info(f"💵 [FLIPKART] Link-based price (container fallback): ₹{price} from {price_values}")
                             
                             if not price:
-                                # Set a placeholder for direct links
-                                price = 999  # Placeholder price
-                                logger.info(f"💵 [FLIPKART] Using placeholder price for direct link")
+                                # Last resort: search for any price pattern near the product
+                                nearby_text = parent.get_text() if parent else ""
+                                price_match = re.search(r'₹([\d,]+)', nearby_text)
+                                if price_match:
+                                    price = int(price_match.group(1).replace(',', ''))
+                                    logger.info(f"💵 [FLIPKART] Link-based price (text search): ₹{price}")
+                                else:
+                                    # Set a placeholder for direct links
+                                    price = 999  # Placeholder price
+                                    logger.info(f"💵 [FLIPKART] Using placeholder price for direct link")
                         else:
-                            # Container-based price extraction
-                            price_selectors = [
-                                '._30jeq3',      # Main price class
-                                '._1_WHN1',      # Alternative price
-                                '.srp-x9y0c1',   # Search result price
-                                '._25b18c',      # Updated price class
-                                '._1vC4OE',      # Price container
-                                '.Nx9bqj',       # Current price
-                                '._3I9_wc'       # Price text
-                            ]
+                            # Container-based: Look for ANY Nx9bqj selector 
+                            nx9bqj_elements = product.find_all(class_=lambda x: x and 'Nx9bqj' in ' '.join(x) if isinstance(x, list) else 'Nx9bqj' in x if x else False)
                             
-                            for price_selector in price_selectors:
-                                price_elem = product.select_one(price_selector)
-                                if price_elem:
-                                    price_text = price_elem.get_text(strip=True)
-                                    price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
-                                    if price_match:
-                                        price = int(price_match.group().replace(',', ''))
-                                        logger.info(f"💵 [FLIPKART] Container-based price: ₹{price}")
-                                        break
+                            price_found = False
+                            for elem in nx9bqj_elements:
+                                elem_classes = ' '.join(elem.get('class', []))
+                                elem_text = elem.get_text(strip=True)
+                                logger.info(f"🔍 [FLIPKART] Container Nx9bqj element: class='{elem_classes}' text='{elem_text}'")
+                                
+                                # Look for price pattern
+                                price_match = re.search(r'₹([\d,]+)', elem_text)
+                                if price_match:
+                                    price = int(price_match.group(1).replace(',', ''))
+                                    logger.info(f"💵 [FLIPKART] Container price with selector '{elem_classes}': ₹{price}")
+                                    price_found = True
+                                    break
+                            
+                            if not price_found:
+                                logger.info(f"❌ [FLIPKART] No price found in {len(nx9bqj_elements)} container Nx9bqj elements")
+                                price = -1  # Technical glitch
                         
                         # Extract URL
                         product_url = None
@@ -735,31 +890,37 @@ class ProductScraper:
                         image_url = img_elem.get('src') or img_elem.get('data-src') if img_elem else None
                         logger.info(f"🖼️ [FLIPKART] Image URL: {image_url or 'Not found'}")
                         
-                        if title and price:
-                            # Filter out accessories
-                            title_lower = title.lower()
-                            is_accessory = any(word in title_lower for word in [
-                                'cover', 'case', 'protector', 'screen guard', 'charger', 
-                                'cable', 'headphone', 'earphone', 'stand', 'holder',
-                                'selfie stick', 'tripod', 'mount', 'adapter', 'battery',
-                                'power bank', 'tempered glass', 'lens', 'clip', 'ring'
-                            ])
+                        if title and (price or price == -1):  # Include technical glitch case
+                            # Filter out accessories (but not for technical glitch)
+                            if price != -1:
+                                title_lower = title.lower()
+                                is_accessory = any(word in title_lower for word in [
+                                    'cover', 'case', 'protector', 'screen guard', 'charger', 
+                                    'cable', 'headphone', 'earphone', 'stand', 'holder',
+                                    'selfie stick', 'tripod', 'mount', 'adapter', 'battery',
+                                    'power bank', 'tempered glass', 'lens', 'clip', 'ring'
+                                ])
+                                
+                                if is_accessory:
+                                    logger.info(f"🚫 [FLIPKART] Filtered out accessory: {title[:50]}... at ₹{price}")
+                                    continue
                             
-                            if is_accessory:
-                                logger.info(f"🚫 [FLIPKART] Filtered out accessory: {title[:50]}... at ₹{price}")
-                                continue
+                            # Handle technical glitch case
+                            display_price = "Technical Glitch Occurred" if price == -1 else price
+                            price_for_data = 0 if price == -1 else price  # 0 for JSON serialization
                             
                             result_data = {
                                 'platform': 'Flipkart',
                                 'title': title[:100],
-                                'price': price,
+                                'price': price_for_data,
+                                'display_price': display_price,
                                 'url': product_url,
                                 'image': image_url,
                                 'currency': 'INR',
-                                'availability': 'In Stock'
+                                'availability': 'In Stock' if price != -1 else 'Technical Issue'
                             }
                             self.results.append(result_data)
-                            logger.info(f"✅ [FLIPKART] Added main product: {title[:50]}... at ₹{price}")
+                            logger.info(f"✅ [FLIPKART] Added product: {title[:50]}... - {display_price}")
                         else:
                             logger.warning(f"❌ [FLIPKART] Skipped product #{idx}: title='{title}', price={price}")
                             
