@@ -528,29 +528,50 @@ class ProductScraper:
                 if "flipkart" not in soup.get_text().lower():
                     logger.warning("⚠️ [FLIPKART] Page might not be loading properly - no flipkart text found")
                 
-                # Updated Flipkart product selectors (2024/2025)
-                product_selectors = [
-                    '[data-id]',  # Main product containers
-                    '._1AtVbE',   # Product cards
-                    '._2kHMtA',   # Individual items
-                    '._13oc-S',   # Search results
-                    '[data-tkid]', # Tracking ID items
-                    '._2-gKeQ',   # Alternative containers
-                    '._1fQZEK',   # Product tiles
-                    '.cPHDOP'     # Newer containers
-                ]
+                # Try to find product links first - more reliable approach
+                product_links = soup.find_all('a', href=True)
+                product_urls = []
+                for link in product_links:
+                    href = link.get('href', '')
+                    # Updated Flipkart product patterns
+                    if ('/p/' in href) or ('pid=' in href) or ('/dp/' in href):
+                        # Check if link has meaningful text or img
+                        link_text = link.get_text(strip=True)
+                        has_img = link.find('img') is not None
+                        
+                        if len(link_text) > 10 or has_img:  # Meaningful product link
+                            product_urls.append(link)
+                            logger.info(f"🔗 [FLIPKART] Found product link: {href[:50]}... Text: '{link_text[:30]}...' Has img: {has_img}")
+                            if len(product_urls) >= 8:  # Increased limit
+                                break
                 
-                products = []
-                for selector in product_selectors:
-                    products = soup.select(selector)
-                    if len(products) > 0:
-                        logger.info(f"🎯 [FLIPKART] Found {len(products)} products with selector: {selector}")
-                        break
-                
-                # If no products found, try broader search
-                if len(products) == 0:
-                    logger.warning("⚠️ [FLIPKART] No products found with standard selectors, trying broader search")
-                    products = soup.select('div[data-id], div[class*="_"], a[href*="/p/"]')[:10]
+                if len(product_urls) > 0:
+                    logger.info(f"🎯 [FLIPKART] Found {len(product_urls)} product links using href pattern")
+                    products = product_urls
+                else:
+                    # Fallback: try standard selectors
+                    product_selectors = [
+                        '[data-id]',  # Main product containers
+                        '._1AtVbE',   # Product cards
+                        '._2kHMtA',   # Individual items
+                        '._13oc-S',   # Search results
+                        '[data-tkid]', # Tracking ID items
+                        '._2-gKeQ',   # Alternative containers
+                        '._1fQZEK',   # Product tiles
+                        '.cPHDOP'     # Newer containers
+                    ]
+                    
+                    products = []
+                    for selector in product_selectors:
+                        products = soup.select(selector)
+                        if len(products) > 0:
+                            logger.info(f"🎯 [FLIPKART] Found {len(products)} products with selector: {selector}")
+                            break
+                    
+                    # If still no products found, try broader search
+                    if len(products) == 0:
+                        logger.warning("⚠️ [FLIPKART] No products found with standard selectors, trying broader search")
+                        products = soup.select('div[data-id], div[class*="_"], a[href*="/p/"]')[:10]
                 
                 logger.info(f"🎯 [FLIPKART] Found {len(products)} product containers")
                 
@@ -558,57 +579,147 @@ class ProductScraper:
                     try:
                         logger.info(f"📦 [FLIPKART] Processing product #{idx}")
                         
-                        # Extract title - Updated selectors for 2024/2025
-                        title_selectors = [
-                            '._4rR01T',      # Main title class
-                            '.s1Q9rs',       # Alternative title
-                            '._2WkVRV',      # Product name
-                            '.IRpwTa',       # Item title
-                            'a[title]',      # Link title attribute
-                            '._2B099V',      # Updated title class
-                            '.KzDlHZ',       # Newer title selector
-                            '.wjcEIp'        # Alternative title
-                        ]
-                        
-                        title = None
-                        for title_selector in title_selectors:
-                            title_elem = product.select_one(title_selector)
-                            if title_elem:
-                                title = title_elem.get_text(strip=True) or title_elem.get('title')
-                                if title and len(title) > 3:  # Ensure we have meaningful title
-                                    break
-                        
-                        logger.info(f"📝 [FLIPKART] Title extracted: '{title}'")
+                        # Check if we're dealing with a product link directly
+                        if hasattr(product, 'name') and product.name == 'a':
+                            # Direct link processing
+                            title = product.get_text(strip=True)
+                            
+                            # Try img alt text first (most reliable for Flipkart product links)
+                            if not title or len(title) < 10:
+                                img = product.find('img')
+                                if img:
+                                    title = img.get('alt', '') or img.get('title', '')
+                                    logger.info(f"📝 [FLIPKART] Got title from img alt: '{title}'")
+                            
+                            # Try to get title from URL pattern (Flipkart embeds product name in URL)
+                            if not title or len(title) < 10:
+                                href = product.get('href', '')
+                                if href:
+                                    # Extract product name from URL like /apple-iphone-14-blue-128-gb/p/...
+                                    url_parts = href.split('/')
+                                    for part in url_parts:
+                                        # Look for the product name part (long, has dashes, not 'p' or technical)
+                                        if (len(part) > 15 and 
+                                            '-' in part and 
+                                            'p' != part and 
+                                            'pid' not in part and 
+                                            'lid' not in part and
+                                            not part.startswith('itm')):
+                                            # Convert URL slug to readable title
+                                            title = part.replace('-', ' ').title()
+                                            logger.info(f"📝 [FLIPKART] Extracted title from URL: '{title}'")
+                                            break
+                            
+                            # Look at parent containers for title
+                            if not title or len(title) < 10:
+                                parent = product.parent
+                                if parent:
+                                    # Try common title selectors in parent
+                                    for selector in ['._4rR01T', '.s1Q9rs', '._2WkVRV', '.IRpwTa']:
+                                        title_elem = parent.select_one(selector)
+                                        if title_elem:
+                                            title = title_elem.get_text(strip=True)
+                                            if title and len(title) > 10:
+                                                logger.info(f"📝 [FLIPKART] Got title from parent with {selector}: '{title}'")
+                                                break
+                            
+                            # Try nested text elements as last resort
+                            if not title or len(title) < 10:
+                                nested_text = []
+                                for text_elem in product.find_all(text=True):
+                                    text = text_elem.strip()
+                                    if text and len(text) > 3 and not text.isdigit():
+                                        nested_text.append(text)
+                                title = ' '.join(nested_text[:3]) if nested_text else ''
+                            
+                            logger.info(f"📝 [FLIPKART] Final link-based title: '{title}'")
+                        else:
+                            # Container-based processing
+                            # Extract title - Updated selectors for 2024/2025
+                            title_selectors = [
+                                '._4rR01T',      # Main title class
+                                '.s1Q9rs',       # Alternative title
+                                '._2WkVRV',      # Product name
+                                '.IRpwTa',       # Item title
+                                'a[title]',      # Link title attribute
+                                '._2B099V',      # Updated title class
+                                '.KzDlHZ',       # Newer title selector
+                                '.wjcEIp'        # Alternative title
+                            ]
+                            
+                            title = None
+                            for title_selector in title_selectors:
+                                title_elem = product.select_one(title_selector)
+                                if title_elem:
+                                    title = title_elem.get_text(strip=True) or title_elem.get('title')
+                                    if title and len(title) > 3:  # Ensure we have meaningful title
+                                        break
+                            
+                            logger.info(f"📝 [FLIPKART] Container-based title: '{title}'")
                         
                         # Extract price - Updated selectors
                         price = None
-                        price_selectors = [
-                            '._30jeq3',      # Main price class
-                            '._1_WHN1',      # Alternative price
-                            '.srp-x9y0c1',   # Search result price
-                            '._25b18c',      # Updated price class
-                            '._1vC4OE',      # Price container
-                            '.Nx9bqj',       # Current price
-                            '._3I9_wc'       # Price text
-                        ]
                         
-                        for price_selector in price_selectors:
-                            price_elem = product.select_one(price_selector)
-                            if price_elem:
-                                price_text = price_elem.get_text(strip=True)
-                                price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
-                                if price_match:
-                                    price = int(price_match.group().replace(',', ''))
-                                    logger.info(f"💵 [FLIPKART] Final price: ₹{price}")
-                                    break
+                        if hasattr(product, 'name') and product.name == 'a':
+                            # For direct links, price might not be available in the link itself
+                            # Look in parent or sibling elements
+                            parent = product.parent if product.parent else product
+                            price_selectors = [
+                                '._30jeq3', '._1_WHN1', '.srp-x9y0c1', '._25b18c', 
+                                '._1vC4OE', '.Nx9bqj', '._3I9_wc'
+                            ]
+                            
+                            for selector in price_selectors:
+                                price_elem = parent.select_one(selector)
+                                if price_elem:
+                                    price_text = price_elem.get_text(strip=True)
+                                    price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                                    if price_match:
+                                        price = int(price_match.group().replace(',', ''))
+                                        logger.info(f"💵 [FLIPKART] Link-based price: ₹{price}")
+                                        break
+                            
+                            if not price:
+                                # Set a placeholder for direct links
+                                price = 999  # Placeholder price
+                                logger.info(f"💵 [FLIPKART] Using placeholder price for direct link")
+                        else:
+                            # Container-based price extraction
+                            price_selectors = [
+                                '._30jeq3',      # Main price class
+                                '._1_WHN1',      # Alternative price
+                                '.srp-x9y0c1',   # Search result price
+                                '._25b18c',      # Updated price class
+                                '._1vC4OE',      # Price container
+                                '.Nx9bqj',       # Current price
+                                '._3I9_wc'       # Price text
+                            ]
+                            
+                            for price_selector in price_selectors:
+                                price_elem = product.select_one(price_selector)
+                                if price_elem:
+                                    price_text = price_elem.get_text(strip=True)
+                                    price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                                    if price_match:
+                                        price = int(price_match.group().replace(',', ''))
+                                        logger.info(f"💵 [FLIPKART] Container-based price: ₹{price}")
+                                        break
                         
                         # Extract URL
-                        link_elem = product.select_one('a[href]')
                         product_url = None
-                        if link_elem and link_elem.get('href'):
-                            href = link_elem['href']
-                            product_url = urljoin('https://www.flipkart.com', href)
-                            logger.info(f"🔗 [FLIPKART] Product URL: {product_url}")
+                        if hasattr(product, 'name') and product.name == 'a':
+                            # Direct link
+                            href = product.get('href', '')
+                            if href:
+                                product_url = urljoin('https://www.flipkart.com', href)
+                                logger.info(f"🔗 [FLIPKART] Direct link URL: {product_url}")
+                        else:
+                            # Container-based
+                            link_elem = product.select_one('a[href]')
+                            if link_elem and link_elem.get('href'):
+                                href = link_elem['href']
+                                product_url = urljoin('https://www.flipkart.com', href)
+                                logger.info(f"🔗 [FLIPKART] Container-based URL: {product_url}")
                         
                         # Extract image
                         img_elem = product.select_one('img')
