@@ -15,14 +15,15 @@ const ProductCard = ({ product }) => {
   };
 
   const handleViewDeal = () => {
+    const productTitle = product.title || product.name;
     if (!product.inStock) {
-      showNotification(`${product.title} is currently out of stock on ${product.platform}`, 'info');
+      showNotification(`${productTitle} is currently out of stock on ${product.platform}`, 'info');
       return;
     }
     
     showNotification(`Redirecting to ${product.platform}...`, 'info');
-    // In real app, this would open the actual product link
-    window.open(product.link, '_blank');
+    // Open the actual product link from scraper
+    window.open(product.url || product.link, '_blank');
   };
 
   const handleAddToWatchlist = () => {
@@ -40,7 +41,7 @@ const ProductCard = ({ product }) => {
 
     const updatedWatchlist = [...(user.watchlist || []), product];
     updateUser({ watchlist: updatedWatchlist });
-    showNotification(`${product.title} added to watchlist!`, 'success');
+    showNotification(`${product.title || product.name} added to watchlist!`, 'success');
   };
 
   const getStockStatus = () => {
@@ -59,8 +60,8 @@ const ProductCard = ({ product }) => {
     <div className="product-card">
       <div className="product-image-container">
         <img 
-          src={product.image} 
-          alt={product.title}
+          src={product.image || 'https://via.placeholder.com/300x200?text=Product+Image'} 
+          alt={product.title || product.name}
           onError={(e) => {
             e.target.src = 'https://via.placeholder.com/300x200?text=Product+Image';
           }}
@@ -73,7 +74,7 @@ const ProductCard = ({ product }) => {
       </div>
 
       <div className="product-info">
-        <h4 className="product-title">{product.title}</h4>
+        <h4 className="product-title">{product.title || product.name}</h4>
         
         <div className="price-section">
           <div className="current-price">{formatCurrency(product.price)}</div>
@@ -90,12 +91,14 @@ const ProductCard = ({ product }) => {
         <div className="cost-breakdown">
           <div className="cost-item">
             <span>Shipping: </span>
-            <span>{product.shippingCost === 0 ? 'Free' : formatCurrency(product.shippingCost)}</span>
+            <span>{product.shipping || (product.shippingCost === 0 ? 'Free' : formatCurrency(product.shippingCost || 0))}</span>
           </div>
-          <div className="cost-item total-cost">
-            <span>Total: </span>
-            <span>{formatCurrency(product.totalCost)}</span>
-          </div>
+          {product.totalCost && (
+            <div className="cost-item total-cost">
+              <span>Total: </span>
+              <span>{formatCurrency(product.totalCost)}</span>
+            </div>
+          )}
         </div>
 
         <div className={`stock-status ${stockStatus.className}`}>
@@ -105,8 +108,8 @@ const ProductCard = ({ product }) => {
         {product.dealScore && (
           <div className="deal-score">
             <span>Deal Score: </span>
-            <span className={`score ${product.dealScore >= 8 ? 'excellent' : product.dealScore >= 6 ? 'good' : 'fair'}`}>
-              {product.dealScore.toFixed(1)}/10
+            <span className={`score ${product.dealScore >= 80 ? 'excellent' : product.dealScore >= 60 ? 'good' : 'fair'}`}>
+              {product.dealScore}/100
             </span>
           </div>
         )}

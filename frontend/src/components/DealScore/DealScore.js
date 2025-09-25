@@ -3,24 +3,24 @@ import './DealScore.css';
 
 const DealScore = ({ score = 0, description }) => {
   const getScoreColor = (score) => {
-    if (score >= 8) return '#27ae60'; // Green
-    if (score >= 6) return '#f39c12'; // Orange
+    if (score >= 80) return '#27ae60'; // Green
+    if (score >= 60) return '#f39c12'; // Orange
     return '#e74c3c'; // Red
   };
 
   const getScoreLabel = (score) => {
-    if (score >= 8) return 'Excellent Deal';
-    if (score >= 6) return 'Good Deal';
-    if (score >= 4) return 'Fair Deal';
+    if (score >= 80) return 'Excellent Deal';
+    if (score >= 60) return 'Good Deal';
+    if (score >= 40) return 'Fair Deal';
     return 'Poor Deal';
   };
 
   const getScoreDescription = (score) => {
     if (description) return description;
     
-    if (score >= 8) return 'This is an excellent deal! Price is near all-time low.';
-    if (score >= 6) return 'Good deal with decent savings potential.';
-    if (score >= 4) return 'Fair price, consider waiting for better deals.';
+    if (score >= 80) return 'This is an excellent deal! Price is near all-time low.';
+    if (score >= 60) return 'Good deal with decent savings potential.';
+    if (score >= 40) return 'Fair price, consider waiting for better deals.';
     return 'Not the best time to buy. Price may drop further.';
   };
 
@@ -33,8 +33,8 @@ const DealScore = ({ score = 0, description }) => {
           className="score-circle"
           style={{ '--score-color': getScoreColor(score) }}
         >
-          <div className="score-number">{score.toFixed(1)}</div>
-          <div className="score-max">/10</div>
+          <div className="score-number">{Math.round(score)}</div>
+          <div className="score-max">/100</div>
         </div>
         
         <div className="score-info">
@@ -57,7 +57,7 @@ const DealScore = ({ score = 0, description }) => {
             <div 
               className="breakdown-fill"
               style={{ 
-                width: `${Math.min(score * 10, 100)}%`,
+                width: `${Math.min(score, 100)}%`,
                 backgroundColor: getScoreColor(score)
               }}
             ></div>
@@ -70,7 +70,7 @@ const DealScore = ({ score = 0, description }) => {
             <div 
               className="breakdown-fill"
               style={{ 
-                width: `${Math.min((score - 1) * 12, 100)}%`,
+                width: `${Math.min(score * 0.8, 100)}%`,
                 backgroundColor: getScoreColor(score)
               }}
             ></div>
@@ -83,7 +83,7 @@ const DealScore = ({ score = 0, description }) => {
             <div 
               className="breakdown-fill"
               style={{ 
-                width: `${Math.min((score + 1) * 9, 100)}%`,
+                width: `${Math.min(score * 0.9, 100)}%`,
                 backgroundColor: getScoreColor(score)
               }}
             ></div>
