@@ -71,11 +71,14 @@ const ProductCard = ({ product }) => {
     <div className="product-card">
       <div className="product-image-container">
         <img 
-          src={product.image || 'https://via.placeholder.com/300x200?text=Product+Image'} 
+          src={product.image && product.image !== 'null' && product.image !== '' ? product.image : 'https://via.placeholder.com/300x200/e2e8f0/4a5568?text=Product+Image'} 
           alt={product.title || product.name}
           onError={(e) => {
-            e.target.src = 'https://via.placeholder.com/300x200?text=Product+Image';
+            if (e.target.src !== 'https://via.placeholder.com/300x200/e2e8f0/4a5568?text=Product+Image') {
+              e.target.src = 'https://via.placeholder.com/300x200/e2e8f0/4a5568?text=Product+Image';
+            }
           }}
+          loading="lazy"
         />
         {product.discount && (
           <div className="discount-badge">

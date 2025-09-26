@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useApp, clearSearchHistory } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { FaSearch, FaCalendarAlt } from 'react-icons/fa';
@@ -7,17 +7,38 @@ import './SearchHistory.css';
 const SearchHistory = () => {
   const { searchHistory, fetchUserSearchHistory } = useApp();
   const { user } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const fetchedRef = useRef(false);
 
   useEffect(() => {
-    if (user && user.username) {
-      fetchUserSearchHistory(user.username);
-    }
-  }, [user, fetchUserSearchHistory]);
+    const fetchHistory = async () => {
+      if (user && user.username && !fetchedRef.current && !isLoading) {
+        setIsLoading(true);
+        fetchedRef.current = true;
+        try {
+          await fetchUserSearchHistory(user.username);
+        } catch (error) {
+          console.error('Error fetching search history:', error);
+        } finally {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchHistory();
+  }, [user?.username, fetchUserSearchHistory]); // Only depend on username, not entire user object
 
   const handleClearHistory = async () => {
     if (user && user.username) {
-      await clearSearchHistory(user.username);
-      fetchUserSearchHistory(user.username);
+      setIsLoading(true);
+      try {
+        await clearSearchHistory(user.username);
+        await fetchUserSearchHistory(user.username);
+      } catch (error) {
+        console.error('Error clearing search history:', error);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 
@@ -32,8 +53,9 @@ const SearchHistory = () => {
         )}
       </div>
       <ul className="search-history-list">
-        {searchHistory.length === 0 && <li>No search history found.</li>}
-        {searchHistory.map((item, idx) => (
+        {isLoading && <li>Loading search history...</li>}
+        {!isLoading && searchHistory.length === 0 && <li>No search history found.</li>}
+        {!isLoading && searchHistory.map((item, idx) => (
           <li className="search-history-item" key={idx}>
             <span className="search-history-query">
               <FaSearch style={{ marginRight: 6, color: '#3182ce' }} />

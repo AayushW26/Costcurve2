@@ -33,7 +33,7 @@ const Dashboard = () => {
         </div>
 
         {/* Search History Section */}
-        <SearchHistory />
+        {isAuthenticated && <SearchHistory />}
 
         {/* Stats Cards */}
         <div className="stats-grid">
