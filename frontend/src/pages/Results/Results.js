@@ -8,6 +8,31 @@ import './Results.css';
 const Results = () => {
   const { searchResults, isSearching } = useApp();
 
+  // All hooks must be called at the top level, before any early returns
+  const bestDeal = React.useMemo(() => {
+    if (!searchResults || searchResults.length === 0) return null;
+    return searchResults.reduce((best, current) => 
+      (current.price || current.totalCost || 0) < (best.price || best.totalCost || 0) ? current : best
+    );
+  }, [searchResults]);
+
+  const maxSavings = React.useMemo(() => {
+    if (!searchResults || searchResults.length === 0) return 0;
+    const prices = searchResults.map(p => p.price || p.totalCost || 0);
+    return Math.max(...prices) - Math.min(...prices);
+  }, [searchResults]);
+
+  const inStockCount = React.useMemo(() => {
+    if (!searchResults || searchResults.length === 0) return 0;
+    return searchResults.filter(p => p.inStock).length;
+  }, [searchResults]);
+
+  const avgDiscount = React.useMemo(() => {
+    if (!searchResults || searchResults.length === 0) return 0;
+    return Math.round(searchResults.reduce((acc, p) => acc + (p.discount || 0), 0) / searchResults.length);
+  }, [searchResults]);
+
+  // Early returns after all hooks are called
   if (isSearching) {
     return (
       <div className="results-page">
@@ -41,10 +66,6 @@ const Results = () => {
     );
   }
 
-  const bestDeal = searchResults.reduce((best, current) => 
-    current.totalCost < best.totalCost ? current : best
-  );
-
   return (
     <div className="results-page">
       <div className="container">
@@ -55,13 +76,15 @@ const Results = () => {
         </div>
 
         {/* Best Deal Highlight */}
-        <div className="best-deal-section">
-          <div className="best-deal-badge">
-            <i className="fas fa-trophy"></i>
-            <span>Best Deal Found</span>
+        {bestDeal && (
+          <div className="best-deal-section">
+            <div className="best-deal-badge">
+              <i className="fas fa-trophy"></i>
+              <span>Best Deal Found</span>
+            </div>
+            <ProductCard product={bestDeal} />
           </div>
-          <ProductCard product={bestDeal} />
-        </div>
+        )}
 
         {/* All Results */}
         <div className="all-results-section">
@@ -78,7 +101,7 @@ const Results = () => {
           <div className="analytics-grid">
             <div className="chart-container">
               <PriceChart 
-                productName={searchResults[0]?.title || 'Product'} 
+                productName={searchResults[0]?.name || searchResults[0]?.title || 'Product'} 
                 currentPrice={searchResults[0]?.price || 134900}
                 priceHistory={[
                   { date: '2024-01-01', price: 149900 },
@@ -92,7 +115,7 @@ const Results = () => {
               />
             </div>
             <div className="deal-score-container">
-              <DealScore score={bestDeal.dealScore || 8.5} />
+              <DealScore score={bestDeal?.dealScore || 8.5} />
             </div>
           </div>
         </div>
@@ -100,15 +123,15 @@ const Results = () => {
         {/* Summary Stats */}
         <div className="summary-stats">
           <div className="stat-item">
-            <div className="stat-value">₹{Math.max(...searchResults.map(p => p.totalCost)) - Math.min(...searchResults.map(p => p.totalCost))}</div>
+            <div className="stat-value">₹{maxSavings}</div>
             <div className="stat-label">Max Savings Possible</div>
           </div>
           <div className="stat-item">
-            <div className="stat-value">{searchResults.filter(p => p.inStock).length}</div>
+            <div className="stat-value">{inStockCount}</div>
             <div className="stat-label">In Stock</div>
           </div>
           <div className="stat-item">
-            <div className="stat-value">{Math.round(searchResults.reduce((acc, p) => acc + (p.discount || 0), 0) / searchResults.length)}%</div>
+            <div className="stat-value">{avgDiscount}%</div>
             <div className="stat-label">Avg Discount</div>
           </div>
         </div>
