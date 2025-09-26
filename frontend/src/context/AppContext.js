@@ -12,8 +12,16 @@ export async function saveSearchHistory(username, query, filters) {
 }
 
 export async function getSearchHistory(username) {
-  const res = await fetch(`/api/user/${username}/search-history`);
-  return res.json();
+  try {
+    const res = await fetch(`/api/user/${username}/search-history`);
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('Error fetching search history:', error);
+    return { success: false, searchHistory: [] };
+  }
 }
 
 export async function addToCart(username, item) {
@@ -38,10 +46,18 @@ export async function removeFromCart(username, productId) {
 }
 
 export async function clearSearchHistory(username) {
-  const res = await fetch(`/api/user/${username}/search-history`, {
-    method: 'DELETE'
-  });
-  return res.json();
+  try {
+    const res = await fetch(`/api/user/${username}/search-history`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    return await res.json();
+  } catch (error) {
+    console.error('Error clearing search history:', error);
+    return { success: false };
+  }
 }
 
 const AppContext = createContext();
@@ -62,13 +78,14 @@ export const AppProvider = ({ children }) => {
   const { user } = useAuth();
   // Fetch user search history
   const fetchUserSearchHistory = useCallback(async (username) => {
+    if (!username) return;
     try {
       const res = await getSearchHistory(username);
       if (res.success) {
         setSearchHistory(res.searchHistory);
       }
     } catch (e) {
-      // Optionally handle error
+      console.error('Error fetching search history:', e);
     }
   }, []);
 
@@ -86,6 +103,8 @@ export const AppProvider = ({ children }) => {
   }, []);
 
   const searchProducts = useCallback(async (query, filters) => {
+    if (isSearching) return; // Prevent multiple simultaneous searches
+    
     setIsSearching(true);
     try {
       const response = await fetch('/api/search', {
@@ -94,24 +113,36 @@ export const AppProvider = ({ children }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ query, filters }),
+        signal: AbortSignal.timeout(30000) // 30 second timeout
       });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.json();
       setSearchResults(data.products || []);
+      
       // Save search history if user is logged in
       if (user && user.username) {
         try {
           await saveSearchHistory(user.username, query, filters);
         } catch (e) {
-          // Ignore errors for search history
+          console.warn('Failed to save search history:', e);
         }
       }
     } catch (error) {
-      showNotification('Search failed. Please try again.', 'error');
+      if (error.name === 'AbortError') {
+        showNotification('Search timed out. Please try again.', 'error');
+      } else {
+        showNotification('Search failed. Please try again.', 'error');
+      }
       console.error('Search error:', error);
+      setSearchResults([]);
     } finally {
       setIsSearching(false);
     }
-  }, [showNotification, user]);
+  }, [showNotification, user, isSearching]);
 
 
   const contextValue = useMemo(
