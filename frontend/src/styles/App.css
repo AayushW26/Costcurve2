@@ -15,63 +15,68 @@
 /* Notification System */
 .notification-container {
   position: fixed;
-  top: 80px;
-  right: 20px;
+  top: 100px;
+  right: 24px;
   z-index: 3000;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
 }
 
 .notification {
   background: white;
-  border-radius: 10px;
-  padding: 1rem 1.5rem;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  border-left: 4px solid #667eea;
-  animation: slideInRight 0.3s ease, fadeOut 0.3s ease 4.7s;
-  max-width: 400px;
+  border-radius: 16px;
+  padding: 1.25rem 1.75rem;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.2), 0 20px 60px -10px rgba(0, 0, 0, 0.15);
+  border-left: 5px solid #6366f1;
+  animation: slideInRight 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55), fadeOut 0.4s ease 4.6s;
+  max-width: 420px;
   word-wrap: break-word;
   position: relative;
   cursor: pointer;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(226, 232, 240, 0.5);
 }
 
 .notification.success {
-  border-left-color: #27ae60;
+  border-left-color: #10b981;
 }
 
 .notification.error {
-  border-left-color: #e74c3c;
+  border-left-color: #ef4444;
 }
 
 .notification.warning {
-  border-left-color: #f39c12;
+  border-left-color: #f59e0b;
 }
 
 .notification.info {
-  border-left-color: #3498db;
+  border-left-color: #3b82f6;
 }
 
 .notification-close {
   position: absolute;
-  top: 0.5rem;
-  right: 0.75rem;
+  top: 0.75rem;
+  right: 1rem;
   background: none;
   border: none;
-  font-size: 1.25rem;
-  color: #666;
+  font-size: 1.375rem;
+  color: #64748b;
   cursor: pointer;
   padding: 0;
   line-height: 1;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 700;
 }
 
 .notification-close:hover {
-  color: #333;
+  color: #0f172a;
+  transform: rotate(90deg);
 }
 
 @keyframes slideInRight {
   from {
-    transform: translateX(100%);
+    transform: translateX(120%);
     opacity: 0;
   }
   to {
@@ -86,7 +91,7 @@
   }
   to {
     opacity: 0;
-    transform: translateX(100%);
+    transform: translateX(120%);
   }
 }
 
@@ -97,8 +102,9 @@
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(5px);
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   z-index: 4000;
   display: flex;
   justify-content: center;
@@ -108,15 +114,18 @@
 }
 
 .loading-overlay .spinner {
-  width: 60px;
-  height: 60px;
+  width: 70px;
+  height: 70px;
   border-width: 5px;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
+  border-color: rgba(255, 255, 255, 0.2);
+  border-top-color: white;
 }
 
 .loading-overlay p {
-  font-size: 1.1rem;
-  font-weight: 500;
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 /* Page Transitions */
@@ -143,25 +152,32 @@
 /* Error Boundary */
 .error-boundary {
   text-align: center;
-  padding: 3rem;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 20px;
-  margin: 2rem auto;
-  max-width: 600px;
+  padding: 3.5rem;
+  background: white;
+  border-radius: 24px;
+  margin: 2.5rem auto;
+  max-width: 700px;
+  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(226, 232, 240, 0.8);
 }
 
 .error-boundary h2 {
-  color: #e74c3c;
-  margin-bottom: 1rem;
+  color: #ef4444;
+  margin-bottom: 1.25rem;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 800;
+  font-size: 2rem;
 }
 
 .error-boundary p {
-  color: #666;
-  margin-bottom: 2rem;
+  color: #64748b;
+  margin-bottom: 2.5rem;
+  font-size: 1.0625rem;
+  line-height: 1.7;
 }
 
 .error-boundary .btn {
-  background: #667eea;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
 }
 
 /* Accessibility */

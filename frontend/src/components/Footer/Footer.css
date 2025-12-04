@@ -1,41 +1,51 @@
 .footer {
-  background: rgba(0, 0, 0, 0.9);
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
   color: white;
-  padding: 3rem 0 1rem;
+  padding: 3.5rem 0 1.5rem;
+  margin-top: 3rem;
 }
 
 .footer .container {
-  max-width: 1200px;
+  max-width: 1280px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 24px;
 }
 
 .footer-content {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 2rem;
-  margin-bottom: 2rem;
+  gap: 2.5rem;
+  margin-bottom: 2.5rem;
 }
 
 .footer-section h4 {
-  color: #667eea;
-  margin-bottom: 1rem;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 1.25rem;
   font-size: 1.5rem;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.625rem;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.01em;
 }
 
 .footer-section h5 {
-  color: #fff;
-  margin-bottom: 1rem;
-  font-size: 1.1rem;
+  color: #f1f5f9;
+  margin-bottom: 1.25rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  font-family: 'Poppins', sans-serif;
 }
 
 .footer-section p {
-  color: #ccc;
-  line-height: 1.6;
+  color: #cbd5e1;
+  line-height: 1.7;
   margin-bottom: 1rem;
+  font-weight: 500;
 }
 
 .footer-section ul {
@@ -44,25 +54,46 @@
 }
 
 .footer-section ul li {
-  color: #ccc;
-  margin-bottom: 0.5rem;
+  color: #cbd5e1;
+  margin-bottom: 0.625rem;
   cursor: pointer;
-  transition: color 0.3s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-weight: 500;
+  padding-left: 0;
+  position: relative;
+}
+
+.footer-section ul li::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .footer-section ul li:hover {
-  color: #667eea;
+  color: #6366f1;
+  transform: translateX(4px);
+}
+
+.footer-section ul li:hover::before {
+  width: 100%;
 }
 
 .footer-bottom {
   text-align: center;
-  padding-top: 2rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding-top: 2.5rem;
+  border-top: 1px solid rgba(203, 213, 225, 0.15);
 }
 
 .footer-bottom p {
-  color: #ccc;
+  color: #cbd5e1;
   margin: 0;
+  font-weight: 500;
+  font-size: 0.9375rem;
 }
 
 /* Mobile Responsive */
