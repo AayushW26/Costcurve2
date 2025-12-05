@@ -67,18 +67,41 @@ const ProductCard = ({ product }) => {
   const stockStatus = getStockStatus();
   const isAlreadyInWatchlist = user && user.watchlist?.some(item => item.id === product.id);
 
+  // Helper function to validate and get image URL
+  const getImageUrl = () => {
+    const placeholderUrl = 'https://via.placeholder.com/300x200/e2e8f0/4a5568?text=Product+Image';
+    
+    if (!product.image || product.image === 'null' || product.image === '' || product.image === 'undefined') {
+      return placeholderUrl;
+    }
+    
+    // Check if it's a data URI (placeholder) - skip these
+    if (product.image.startsWith('data:')) {
+      return placeholderUrl;
+    }
+    
+    // Ensure it's a valid URL
+    if (!product.image.startsWith('http')) {
+      return placeholderUrl;
+    }
+    
+    return product.image;
+  };
+
   return (
     <div className="product-card">
       <div className="product-image-container">
         <img 
-          src={product.image && product.image !== 'null' && product.image !== '' ? product.image : 'https://via.placeholder.com/300x200/e2e8f0/4a5568?text=Product+Image'} 
+          src={getImageUrl()} 
           alt={product.title || product.name}
           onError={(e) => {
-            if (e.target.src !== 'https://via.placeholder.com/300x200/e2e8f0/4a5568?text=Product+Image') {
-              e.target.src = 'https://via.placeholder.com/300x200/e2e8f0/4a5568?text=Product+Image';
+            const placeholderUrl = 'https://via.placeholder.com/300x200/e2e8f0/4a5568?text=Product+Image';
+            if (e.target.src !== placeholderUrl) {
+              e.target.src = placeholderUrl;
             }
           }}
           loading="lazy"
+          referrerPolicy="no-referrer"
         />
         {product.discount && (
           <div className="discount-badge">

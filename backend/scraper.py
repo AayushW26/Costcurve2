@@ -360,17 +360,18 @@ class ProductScraper:
         self.add_random_delay()
 
     def scrape_amazon(self, query):
-        """Scrape Amazon India with mobile headers to bypass blocking"""
+        """Scrape Amazon India with optimized headers for image extraction"""
         logger.info(f"🔍 [AMAZON] Starting scrape for: {query}")
         
-        # Use mobile User-Agent that works better with Amazon
+        # Use mobile User-Agent that works better with Amazon (less blocking)
         mobile_headers = {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
+            'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
             'DNT': '1',
             'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
         }
         
         search_url = f"https://www.amazon.in/s?k={quote_plus(query)}&ref=sr_pg_1"
@@ -455,18 +456,106 @@ class ProductScraper:
                             product_url = urljoin('https://www.amazon.in', href)
                             logger.info(f"🔗 [AMAZON] Product URL: {product_url}")
                         
-                        # Extract image (robust)
-                        img_elem = product.select_one('img.s-image, img.a-dynamic-image, img, .a-dynamic-image')
+                        # Extract image (robust) - Amazon uses various image loading strategies
                         image_url = None
-                        if img_elem:
-                            # Try multiple possible attributes
-                            for attr in ['src', 'data-src', 'data-image-src', 'data-lazy', 'data-original', 'data-old-hires']:
-                                image_url = img_elem.get(attr)
-                                if image_url:
-                                    break
-                            # Convert relative URLs to absolute
-                            if image_url and image_url.startswith('/'):
-                                image_url = urljoin('https://www.amazon.in', image_url)
+                        
+                        # Method 1: Check for data-mlt-img-url attribute (Amazon stores thumbnail here)
+                        mlt_elem = product.select_one('[data-mlt-img-url]')
+                        if mlt_elem:
+                            mlt_img = mlt_elem.get('data-mlt-img-url')
+                            if mlt_img and 'media-amazon' in mlt_img and '/I/' in mlt_img:
+                                # Upgrade thumbnail to larger image
+                                image_url = re.sub(r'\._[A-Z]{2}\d+[,_]\d+_', '._AC_SL500_', mlt_img)
+                                if image_url == mlt_img:  # If no replacement, try different pattern
+                                    image_url = re.sub(r'\._[A-Z]+\d+[,_]?\d*_?', '._AC_SL500_', mlt_img)
+                        
+                        # Method 2: Check img elements if method 1 didn't work
+                        if not image_url:
+                            img_elem = product.select_one('img.s-image, img.a-dynamic-image, img[data-image-latency], img')
+                            if img_elem:
+                                # Priority order for Amazon images:
+                                # 1. srcset contains high-res images (parse the largest one)
+                                # 2. data-src for lazy-loaded images
+                                # 3. src if it's not a data URI or placeholder
+                                
+                                # Try srcset first (contains multiple resolutions)
+                                srcset = img_elem.get('srcset')
+                                if srcset:
+                                    # Parse srcset to get the highest resolution image
+                                    srcset_parts = srcset.split(',')
+                                    best_url = None
+                                    best_size = 0
+                                    for part in srcset_parts:
+                                        part = part.strip()
+                                        if ' ' in part:
+                                            url_part, size_part = part.rsplit(' ', 1)
+                                            url_part = url_part.strip()
+                                            size_match = re.search(r'(\d+)', size_part)
+                                            if size_match:
+                                                size = int(size_match.group(1))
+                                                # Skip SVG placeholders and only accept JPG/PNG images
+                                                if size > best_size and url_part.startswith('http') and not url_part.endswith('.svg'):
+                                                    # Must be an actual product image
+                                                    if 'media-amazon' in url_part and '/I/' in url_part:
+                                                        best_size = size
+                                                        best_url = url_part
+                                        elif part.startswith('http') and not part.endswith('.svg'):
+                                            if not best_url and 'media-amazon' in part and '/I/' in part:
+                                                best_url = part
+                                    if best_url:
+                                        image_url = best_url
+                                
+                                # If no srcset, try other attributes
+                                if not image_url:
+                                    for attr in ['data-src', 'data-image-src', 'data-lazy', 'data-original', 'data-old-hires', 'src']:
+                                        potential_url = img_elem.get(attr)
+                                        if potential_url:
+                                            # Skip data URIs, placeholder images, SVGs, and grey-pixel
+                                            if potential_url.startswith('data:'):
+                                                continue
+                                            if potential_url.endswith('.svg') or potential_url.endswith('.gif'):
+                                                continue
+                                            if 'grey-pixel' in potential_url or 'placeholder' in potential_url.lower():
+                                                continue
+                                            if 'sprite' in potential_url.lower() or 'transparent' in potential_url.lower():
+                                                continue
+                                            # Only accept actual Amazon product images
+                                            if 'media-amazon' in potential_url and '/I/' in potential_url:
+                                                image_url = potential_url
+                                                break
+                        
+                        # Fallback: Search for image URLs in the entire product HTML
+                        if not image_url:
+                            product_html = str(product)
+                            # Look for Amazon CDN image URLs with product image pattern
+                            img_pattern = r'https://m\.media-amazon\.com/images/I/[A-Za-z0-9_\-]+\.(jpg|jpeg|png|webp)'
+                            for url_match in re.finditer(img_pattern, product_html):
+                                potential_img = url_match.group()
+                                # Found a valid product image
+                                image_url = potential_img
+                                break
+                        
+                        # Second fallback: Try to construct image URL from ASIN
+                        if not image_url:
+                            asin = product.get('data-asin')
+                            if asin and product_url:
+                                # Extract ASIN from URL if not in data attribute
+                                if not asin:
+                                    asin_match = re.search(r'/dp/([A-Z0-9]{10})', product_url)
+                                    if asin_match:
+                                        asin = asin_match.group(1)
+                        
+                        # Convert relative URLs to absolute
+                        if image_url and image_url.startswith('/'):
+                            image_url = urljoin('https://www.amazon.in', image_url)
+                        
+                        # Upgrade Amazon image quality by modifying URL parameters
+                        if image_url and 'amazon' in image_url.lower():
+                            # Amazon images can be resized by changing URL parameters
+                            # Replace small sizes with larger ones (500px)
+                            image_url = re.sub(r'\._[A-Z]{2}\d+[A-Z_]*_', '._AC_SL500_', image_url)
+                            image_url = re.sub(r'\._[A-Z]{2}_[A-Z]{2}\d+[A-Z_]*_', '._AC_SL500_', image_url)
+                                
                         logger.info(f"🖼️ [AMAZON] Image URL for product #{idx}: {image_url if image_url else 'Not found'}")
                         
                         if title and price:
