@@ -2,6 +2,7 @@
 """
 Cost Curve Web Scraper - Indian E-commerce Focus with Accessible Sites
 Prioritizes accessible sites without anti-bot protection for reliable scraping
+Includes Selenium-based scrapers for JavaScript-rendered sites
 """
 
 import sys
@@ -13,6 +14,21 @@ from bs4 import BeautifulSoup
 from urllib.parse import quote_plus, urljoin
 import re
 import logging
+
+# Selenium imports (optional - for JS-rendered sites)
+SELENIUM_AVAILABLE = False
+try:
+    from selenium import webdriver
+    from selenium.webdriver.chrome.service import Service as ChromeService
+    from selenium.webdriver.chrome.options import Options as ChromeOptions
+    from selenium.webdriver.common.by import By
+    from selenium.webdriver.support.ui import WebDriverWait
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.common.exceptions import TimeoutException, WebDriverException
+    from webdriver_manager.chrome import ChromeDriverManager
+    SELENIUM_AVAILABLE = True
+except ImportError:
+    pass
 
 # Configure detailed logging
 logging.basicConfig(
@@ -31,6 +47,84 @@ class ProductScraper:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
         })
         self.results = []
+        self.driver = None  # Selenium WebDriver (lazy-loaded)
+        
+    def _get_selenium_driver(self):
+        """Get or create Selenium WebDriver with stealth options"""
+        if not SELENIUM_AVAILABLE:
+            logger.warning("⚠️ Selenium not available. Install with: pip install selenium webdriver-manager")
+            return None
+            
+        if self.driver is None:
+            try:
+                logger.info("🌐 [SELENIUM] Initializing Chrome WebDriver...")
+                
+                chrome_options = ChromeOptions()
+                chrome_options.add_argument('--headless=new')  # New headless mode
+                chrome_options.add_argument('--no-sandbox')
+                chrome_options.add_argument('--disable-dev-shm-usage')
+                chrome_options.add_argument('--disable-gpu')
+                chrome_options.add_argument('--window-size=1920,1080')
+                chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+                chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+                chrome_options.add_experimental_option('useAutomationExtension', False)
+                
+                # Random user agent
+                user_agents = [
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                ]
+                chrome_options.add_argument(f'user-agent={random.choice(user_agents)}')
+                
+                # Use webdriver-manager to get the correct driver
+                try:
+                    # Try to use webdriver-manager with correct platform detection
+                    import platform
+                    os_name = platform.system().lower()
+                    
+                    if os_name == 'windows':
+                        # Force win64 architecture
+                        from webdriver_manager.core.os_manager import ChromeType
+                        service = ChromeService(ChromeDriverManager(chrome_type=ChromeType.GOOGLE).install())
+                    else:
+                        service = ChromeService(ChromeDriverManager().install())
+                    
+                    self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                except Exception as wdm_error:
+                    logger.warning(f"⚠️ [SELENIUM] WebDriver Manager error: {wdm_error}")
+                    # Fallback: Try using system Chrome driver
+                    try:
+                        self.driver = webdriver.Chrome(options=chrome_options)
+                    except Exception as fallback_error:
+                        logger.error(f"❌ [SELENIUM] Fallback also failed: {fallback_error}")
+                        return None
+                
+                # Stealth settings
+                self.driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+                    'source': '''
+                        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                        Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+                        Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+                    '''
+                })
+                
+                logger.info("✅ [SELENIUM] Chrome WebDriver initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ [SELENIUM] Failed to initialize WebDriver: {e}")
+                return None
+                
+        return self.driver
+    
+    def _close_selenium_driver(self):
+        """Close Selenium WebDriver"""
+        if self.driver:
+            try:
+                self.driver.quit()
+                logger.info("🔒 [SELENIUM] WebDriver closed")
+            except:
+                pass
+            self.driver = None
         
     def add_random_delay(self, min_delay=0.1, max_delay=0.3):
         """Add random delay to avoid being blocked (reduced for speed)"""
@@ -1138,23 +1232,1286 @@ class ProductScraper:
         
         self.add_random_delay()
 
-    def scrape_all(self, query):
-        """Scrape Indian e-commerce platforms including major sites"""
-        logger.info(f"Starting scrape for query: {query}")
+    # ==================== GENERAL MARKETPLACES ====================
+
+    def scrape_meesho(self, query):
+        """Scrape Meesho - Social commerce platform with affordable products"""
+        try:
+            logger.info(f"🔍 [MEESHO] Starting scrape for: {query}")
+            
+            # Meesho uses a mobile-first approach
+            mobile_headers = {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+            }
+            
+            search_url = f"https://www.meesho.com/search?q={quote_plus(query)}"
+            logger.info(f"🌐 [MEESHO] Search URL: {search_url}")
+            
+            response = self.session.get(search_url, headers=mobile_headers, timeout=15)
+            logger.info(f"✅ [MEESHO] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Meesho product card selectors
+                products = soup.select('[data-testid="product-card"], .ProductCard, .sc-dkzDqf')[:5]
+                logger.info(f"🎯 [MEESHO] Found {len(products)} product containers")
+                
+                for idx, product in enumerate(products[:5], 1):
+                    try:
+                        logger.info(f"📦 [MEESHO] Processing product #{idx}")
+                        
+                        # Extract title
+                        title_elem = product.select_one('p[class*="Text"], .ProductTitle, h5, p')
+                        title = title_elem.get_text(strip=True) if title_elem else None
+                        logger.info(f"📝 [MEESHO] Title: {title}")
+                        
+                        # Extract price
+                        price_elem = product.select_one('h5[class*="Text"], .ProductPrice, span[class*="price"]')
+                        price = None
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                            if price_match:
+                                price = int(price_match.group())
+                        logger.info(f"💵 [MEESHO] Price: ₹{price}")
+                        
+                        # Extract URL
+                        link_elem = product.select_one('a')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            product_url = urljoin('https://www.meesho.com', href)
+                        
+                        # Extract image
+                        img_elem = product.select_one('img')
+                        image_url = None
+                        if img_elem:
+                            image_url = img_elem.get('src') or img_elem.get('data-src')
+                        
+                        if title and price:
+                            self.results.append({
+                                'platform': 'Meesho',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'In Stock'
+                            })
+                            logger.info(f"✅ [MEESHO] Added: {title[:50]}... at ₹{price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [MEESHO] Error parsing product #{idx}: {e}")
+                        continue
+                        
+        except Exception as e:
+            logger.error(f"Error scraping Meesho: {e}")
         
-        # MAJOR PLATFORMS: Amazon and Flipkart with mobile headers
+        self.add_random_delay()
+
+    def scrape_jiomart(self, query):
+        """Scrape JioMart - Reliance's e-commerce platform"""
+        try:
+            logger.info(f"🔍 [JIOMART] Starting scrape for: {query}")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
+            
+            search_url = f"https://www.jiomart.com/search/{quote_plus(query)}"
+            logger.info(f"🌐 [JIOMART] Search URL: {search_url}")
+            
+            response = self.session.get(search_url, headers=headers, timeout=15)
+            logger.info(f"✅ [JIOMART] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # JioMart product selectors
+                products = soup.select('.plp-card-wrapper, .product-card, [data-qa="product"]')[:5]
+                logger.info(f"🎯 [JIOMART] Found {len(products)} product containers")
+                
+                for idx, product in enumerate(products[:5], 1):
+                    try:
+                        logger.info(f"📦 [JIOMART] Processing product #{idx}")
+                        
+                        # Extract title
+                        title_elem = product.select_one('.plp-card-details-name, .product-title, h3, span[class*="name"]')
+                        title = title_elem.get_text(strip=True) if title_elem else None
+                        
+                        # Extract price
+                        price_elem = product.select_one('.plp-card-details-price, .product-price, span[class*="price"]')
+                        price = None
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                            if price_match:
+                                price = int(price_match.group())
+                        
+                        # Extract URL
+                        link_elem = product.select_one('a')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            product_url = urljoin('https://www.jiomart.com', href)
+                        
+                        # Extract image
+                        img_elem = product.select_one('img')
+                        image_url = None
+                        if img_elem:
+                            image_url = img_elem.get('src') or img_elem.get('data-src')
+                        
+                        if title and price:
+                            self.results.append({
+                                'platform': 'JioMart',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'In Stock'
+                            })
+                            logger.info(f"✅ [JIOMART] Added: {title[:50]}... at ₹{price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [JIOMART] Error parsing product #{idx}: {e}")
+                        continue
+                        
+        except Exception as e:
+            logger.error(f"Error scraping JioMart: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_indiamart(self, query):
+        """Scrape IndiaMART - B2B marketplace"""
+        try:
+            logger.info(f"🔍 [INDIAMART] Starting scrape for: {query}")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+            
+            search_url = f"https://dir.indiamart.com/search.mp?ss={quote_plus(query)}"
+            logger.info(f"🌐 [INDIAMART] Search URL: {search_url}")
+            
+            response = self.session.get(search_url, headers=headers, timeout=15)
+            logger.info(f"✅ [INDIAMART] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # IndiaMART product selectors
+                products = soup.select('.prd-card, .card, [class*="product"]')[:5]
+                logger.info(f"🎯 [INDIAMART] Found {len(products)} product containers")
+                
+                for idx, product in enumerate(products[:5], 1):
+                    try:
+                        logger.info(f"📦 [INDIAMART] Processing product #{idx}")
+                        
+                        # Extract title
+                        title_elem = product.select_one('.prd-name, .product-name, h2, h3')
+                        title = title_elem.get_text(strip=True) if title_elem else None
+                        
+                        # Extract price (IndiaMART often shows price range)
+                        price_elem = product.select_one('.prc, .price, span[class*="price"]')
+                        price = None
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            # Get the first price if it's a range
+                            price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                            if price_match:
+                                price = int(price_match.group())
+                        
+                        # Extract URL
+                        link_elem = product.select_one('a')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            if href.startswith('http'):
+                                product_url = href
+                            else:
+                                product_url = urljoin('https://www.indiamart.com', href)
+                        
+                        # Extract image
+                        img_elem = product.select_one('img')
+                        image_url = None
+                        if img_elem:
+                            image_url = img_elem.get('src') or img_elem.get('data-src')
+                        
+                        if title and price:
+                            self.results.append({
+                                'platform': 'IndiaMART',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'Available'
+                            })
+                            logger.info(f"✅ [INDIAMART] Added: {title[:50]}... at ₹{price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [INDIAMART] Error parsing product #{idx}: {e}")
+                        continue
+                        
+        except Exception as e:
+            logger.error(f"Error scraping IndiaMART: {e}")
+        
+        self.add_random_delay()
+
+    # ==================== SPECIALIZED E-COMMERCE ====================
+
+    def scrape_myntra(self, query):
+        """Scrape Myntra - Fashion e-commerce platform"""
+        try:
+            logger.info(f"🔍 [MYNTRA] Starting scrape for: {query}")
+            
+            # Myntra requires mobile headers
+            mobile_headers = {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
+            
+            search_url = f"https://www.myntra.com/{quote_plus(query.replace(' ', '-'))}"
+            logger.info(f"🌐 [MYNTRA] Search URL: {search_url}")
+            
+            response = self.session.get(search_url, headers=mobile_headers, timeout=15)
+            logger.info(f"✅ [MYNTRA] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Myntra product selectors
+                products = soup.select('.product-base, .product-productMetaInfo, [class*="product-sliderContainer"]')[:5]
+                logger.info(f"🎯 [MYNTRA] Found {len(products)} product containers")
+                
+                # Also try to find products from script tag (Myntra uses SSR)
+                scripts = soup.find_all('script')
+                for script in scripts:
+                    if script.string and 'window.__myx' in str(script.string):
+                        try:
+                            # Extract JSON data from script
+                            json_match = re.search(r'window\.__myx\s*=\s*({.*?});', script.string, re.DOTALL)
+                            if json_match:
+                                logger.info(f"🎯 [MYNTRA] Found SSR data in script tag")
+                        except:
+                            pass
+                
+                for idx, product in enumerate(products[:5], 1):
+                    try:
+                        logger.info(f"📦 [MYNTRA] Processing product #{idx}")
+                        
+                        # Extract title (brand + product name)
+                        brand_elem = product.select_one('.product-brand, h3[class*="brand"]')
+                        name_elem = product.select_one('.product-product, h4[class*="product"]')
+                        
+                        brand = brand_elem.get_text(strip=True) if brand_elem else ''
+                        name = name_elem.get_text(strip=True) if name_elem else ''
+                        title = f"{brand} {name}".strip() if brand or name else None
+                        
+                        # Extract price
+                        price_elem = product.select_one('.product-discountedPrice, .product-price span, [class*="discountedPrice"]')
+                        price = None
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                            if price_match:
+                                price = int(price_match.group())
+                        
+                        # Extract URL
+                        link_elem = product.select_one('a')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            product_url = urljoin('https://www.myntra.com', href)
+                        
+                        # Extract image
+                        img_elem = product.select_one('img.img-responsive, img[class*="product"]')
+                        image_url = None
+                        if img_elem:
+                            image_url = img_elem.get('src') or img_elem.get('data-src')
+                        
+                        if title and price:
+                            self.results.append({
+                                'platform': 'Myntra',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'In Stock'
+                            })
+                            logger.info(f"✅ [MYNTRA] Added: {title[:50]}... at ₹{price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [MYNTRA] Error parsing product #{idx}: {e}")
+                        continue
+                        
+        except Exception as e:
+            logger.error(f"Error scraping Myntra: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_nykaa(self, query):
+        """Scrape Nykaa - Beauty and wellness e-commerce"""
+        try:
+            logger.info(f"🔍 [NYKAA] Starting scrape for: {query}")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+            
+            search_url = f"https://www.nykaa.com/search/result/?q={quote_plus(query)}"
+            logger.info(f"🌐 [NYKAA] Search URL: {search_url}")
+            
+            response = self.session.get(search_url, headers=headers, timeout=15)
+            logger.info(f"✅ [NYKAA] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Nykaa product selectors
+                products = soup.select('.productWrapper, .product-card, [class*="ProductCard"]')[:5]
+                logger.info(f"🎯 [NYKAA] Found {len(products)} product containers")
+                
+                for idx, product in enumerate(products[:5], 1):
+                    try:
+                        logger.info(f"📦 [NYKAA] Processing product #{idx}")
+                        
+                        # Extract title
+                        title_elem = product.select_one('.product-name, .title, [class*="product-title"]')
+                        title = title_elem.get_text(strip=True) if title_elem else None
+                        
+                        # Extract price
+                        price_elem = product.select_one('.post-card__content-price-offer, .price, [class*="price"]')
+                        price = None
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                            if price_match:
+                                price = int(price_match.group())
+                        
+                        # Extract URL
+                        link_elem = product.select_one('a')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            product_url = urljoin('https://www.nykaa.com', href)
+                        
+                        # Extract image
+                        img_elem = product.select_one('img')
+                        image_url = None
+                        if img_elem:
+                            image_url = img_elem.get('src') or img_elem.get('data-src')
+                        
+                        if title and price:
+                            self.results.append({
+                                'platform': 'Nykaa',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'In Stock'
+                            })
+                            logger.info(f"✅ [NYKAA] Added: {title[:50]}... at ₹{price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [NYKAA] Error parsing product #{idx}: {e}")
+                        continue
+                        
+        except Exception as e:
+            logger.error(f"Error scraping Nykaa: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_firstcry(self, query):
+        """Scrape FirstCry - Baby and kids products"""
+        try:
+            logger.info(f"🔍 [FIRSTCRY] Starting scrape for: {query}")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+            
+            search_url = f"https://www.firstcry.com/search?q={quote_plus(query)}"
+            logger.info(f"🌐 [FIRSTCRY] Search URL: {search_url}")
+            
+            response = self.session.get(search_url, headers=headers, timeout=15)
+            logger.info(f"✅ [FIRSTCRY] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # FirstCry product selectors
+                products = soup.select('.product-card, .productBox, [class*="product-listing"]')[:5]
+                logger.info(f"🎯 [FIRSTCRY] Found {len(products)} product containers")
+                
+                for idx, product in enumerate(products[:5], 1):
+                    try:
+                        logger.info(f"📦 [FIRSTCRY] Processing product #{idx}")
+                        
+                        # Extract title
+                        title_elem = product.select_one('.product-title, .prod-name, h3')
+                        title = title_elem.get_text(strip=True) if title_elem else None
+                        
+                        # Extract price
+                        price_elem = product.select_one('.final-price, .price, span[class*="price"]')
+                        price = None
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                            if price_match:
+                                price = int(price_match.group())
+                        
+                        # Extract URL
+                        link_elem = product.select_one('a')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            product_url = urljoin('https://www.firstcry.com', href)
+                        
+                        # Extract image
+                        img_elem = product.select_one('img')
+                        image_url = None
+                        if img_elem:
+                            image_url = img_elem.get('src') or img_elem.get('data-src')
+                        
+                        if title and price:
+                            self.results.append({
+                                'platform': 'FirstCry',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'In Stock'
+                            })
+                            logger.info(f"✅ [FIRSTCRY] Added: {title[:50]}... at ₹{price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [FIRSTCRY] Error parsing product #{idx}: {e}")
+                        continue
+                        
+        except Exception as e:
+            logger.error(f"Error scraping FirstCry: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_ajio(self, query):
+        """Scrape AJIO - Reliance's fashion platform"""
+        try:
+            logger.info(f"🔍 [AJIO] Starting scrape for: {query}")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+            
+            search_url = f"https://www.ajio.com/search/?text={quote_plus(query)}"
+            logger.info(f"🌐 [AJIO] Search URL: {search_url}")
+            
+            response = self.session.get(search_url, headers=headers, timeout=15)
+            logger.info(f"✅ [AJIO] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # AJIO product selectors
+                products = soup.select('.item, .rilrtl-products-list__item, [class*="product-card"]')[:5]
+                logger.info(f"🎯 [AJIO] Found {len(products)} product containers")
+                
+                for idx, product in enumerate(products[:5], 1):
+                    try:
+                        logger.info(f"📦 [AJIO] Processing product #{idx}")
+                        
+                        # Extract title (brand + name)
+                        brand_elem = product.select_one('.brand, [class*="brand"]')
+                        name_elem = product.select_one('.nameCls, [class*="name"]')
+                        
+                        brand = brand_elem.get_text(strip=True) if brand_elem else ''
+                        name = name_elem.get_text(strip=True) if name_elem else ''
+                        title = f"{brand} {name}".strip() if brand or name else None
+                        
+                        # Extract price
+                        price_elem = product.select_one('.price strong, [class*="price"]')
+                        price = None
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                            if price_match:
+                                price = int(price_match.group())
+                        
+                        # Extract URL
+                        link_elem = product.select_one('a')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            product_url = urljoin('https://www.ajio.com', href)
+                        
+                        # Extract image
+                        img_elem = product.select_one('img')
+                        image_url = None
+                        if img_elem:
+                            image_url = img_elem.get('src') or img_elem.get('data-src')
+                        
+                        if title and price:
+                            self.results.append({
+                                'platform': 'AJIO',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'In Stock'
+                            })
+                            logger.info(f"✅ [AJIO] Added: {title[:50]}... at ₹{price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [AJIO] Error parsing product #{idx}: {e}")
+                        continue
+                        
+        except Exception as e:
+            logger.error(f"Error scraping AJIO: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_tatacliq(self, query):
+        """Scrape Tata CLiQ - Premium e-commerce from Tata Group"""
+        try:
+            logger.info(f"🔍 [TATACLIQ] Starting scrape for: {query}")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            }
+            
+            search_url = f"https://www.tatacliq.com/search/?searchCategory=all&text={quote_plus(query)}"
+            logger.info(f"🌐 [TATACLIQ] Search URL: {search_url}")
+            
+            response = self.session.get(search_url, headers=headers, timeout=15)
+            logger.info(f"✅ [TATACLIQ] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                soup = BeautifulSoup(response.text, 'html.parser')
+                
+                # Tata CLiQ product selectors
+                products = soup.select('.ProductModule, .product-card, [class*="ProductItem"]')[:5]
+                logger.info(f"🎯 [TATACLIQ] Found {len(products)} product containers")
+                
+                for idx, product in enumerate(products[:5], 1):
+                    try:
+                        logger.info(f"📦 [TATACLIQ] Processing product #{idx}")
+                        
+                        # Extract title
+                        title_elem = product.select_one('.ProductDescription__productName, .product-name, h3')
+                        title = title_elem.get_text(strip=True) if title_elem else None
+                        
+                        # Extract price
+                        price_elem = product.select_one('.ProductDescription__priceStrikeContainer, .price, [class*="price"]')
+                        price = None
+                        if price_elem:
+                            price_text = price_elem.get_text(strip=True)
+                            price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                            if price_match:
+                                price = int(price_match.group())
+                        
+                        # Extract URL
+                        link_elem = product.select_one('a')
+                        product_url = None
+                        if link_elem and link_elem.get('href'):
+                            href = link_elem['href']
+                            product_url = urljoin('https://www.tatacliq.com', href)
+                        
+                        # Extract image
+                        img_elem = product.select_one('img')
+                        image_url = None
+                        if img_elem:
+                            image_url = img_elem.get('src') or img_elem.get('data-src')
+                        
+                        if title and price:
+                            self.results.append({
+                                'platform': 'Tata CLiQ',
+                                'title': title[:100],
+                                'price': price,
+                                'url': product_url,
+                                'image': image_url,
+                                'currency': 'INR',
+                                'availability': 'In Stock'
+                            })
+                            logger.info(f"✅ [TATACLIQ] Added: {title[:50]}... at ₹{price}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [TATACLIQ] Error parsing product #{idx}: {e}")
+                        continue
+                        
+        except Exception as e:
+            logger.error(f"Error scraping Tata CLiQ: {e}")
+        
+        self.add_random_delay()
+
+    # ==================== SELENIUM-BASED SCRAPERS ====================
+    # These scrapers use Selenium WebDriver to handle JavaScript-rendered sites
+    
+    def scrape_meesho_selenium(self, query):
+        """Scrape Meesho using Selenium for JavaScript-rendered content"""
+        driver = self._get_selenium_driver()
+        if not driver:
+            logger.warning("⚠️ [MEESHO-SELENIUM] Falling back to basic scraper")
+            return self.scrape_meesho(query)
+        
+        try:
+            logger.info(f"🔍 [MEESHO-SELENIUM] Starting scrape for: {query}")
+            search_url = f"https://www.meesho.com/search?q={quote_plus(query)}"
+            logger.info(f"🌐 [MEESHO-SELENIUM] URL: {search_url}")
+            
+            driver.get(search_url)
+            time.sleep(4)  # Wait for JavaScript to render
+            
+            # Scroll down to load products
+            driver.execute_script("window.scrollTo(0, 800);")
+            time.sleep(2)
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            # Try to find product cards by looking for price-containing elements
+            # Meesho products have ₹ symbol in them
+            all_links = soup.find_all('a', href=True)
+            product_links = []
+            
+            for link in all_links:
+                href = link.get('href', '')
+                # Meesho product URLs contain specific patterns
+                if '/product/' in href or (len(href) > 30 and href.startswith('/')):
+                    # Check if this link has price text nearby
+                    link_text = link.get_text()
+                    if '₹' in link_text and len(link_text) > 10:
+                        product_links.append(link)
+                        if len(product_links) >= 5:
+                            break
+            
+            logger.info(f"🎯 [MEESHO-SELENIUM] Found {len(product_links)} product links with prices")
+            
+            for idx, product in enumerate(product_links[:5], 1):
+                try:
+                    logger.info(f"📦 [MEESHO-SELENIUM] Processing product #{idx}")
+                    
+                    # Get all text content from the product link
+                    full_text = product.get_text(separator='|', strip=True)
+                    parts = [p.strip() for p in full_text.split('|') if p.strip()]
+                    
+                    # Extract title - usually the longest meaningful text
+                    title = None
+                    for part in parts:
+                        if len(part) > 15 and '₹' not in part and not part.isdigit():
+                            title = part
+                            break
+                    
+                    # Fallback title extraction
+                    if not title:
+                        for part in parts:
+                            if len(part) > 5 and '₹' not in part and part not in ['Free Delivery', 'Sort by', '+1 More']:
+                                title = part
+                                break
+                    
+                    logger.info(f"📝 [MEESHO-SELENIUM] Title: {title}")
+                    
+                    # Extract price - look for ₹ in text
+                    price = None
+                    for part in parts:
+                        if '₹' in part:
+                            price_match = re.search(r'₹\s*([\d,]+)', part)
+                            if price_match:
+                                price = int(price_match.group(1).replace(',', ''))
+                                break
+                    
+                    logger.info(f"💵 [MEESHO-SELENIUM] Price: ₹{price}")
+                    
+                    # Extract URL
+                    href = product.get('href', '')
+                    product_url = urljoin('https://www.meesho.com', href) if href else None
+                    
+                    # Extract image
+                    img_elem = product.find('img')
+                    image_url = None
+                    if img_elem:
+                        image_url = img_elem.get('src') or img_elem.get('data-src')
+                    
+                    if title and price and title not in ['Sort by :', '+1 More', 'Free Delivery']:
+                        self.results.append({
+                            'platform': 'Meesho',
+                            'title': title[:100],
+                            'price': price,
+                            'url': product_url,
+                            'image': image_url,
+                            'currency': 'INR',
+                            'availability': 'In Stock'
+                        })
+                        logger.info(f"✅ [MEESHO-SELENIUM] Added: {title[:50]}... at ₹{price}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ [MEESHO-SELENIUM] Error parsing product #{idx}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ [MEESHO-SELENIUM] Error: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_jiomart_selenium(self, query):
+        """Scrape JioMart using Selenium for JavaScript-rendered content"""
+        driver = self._get_selenium_driver()
+        if not driver:
+            logger.warning("⚠️ [JIOMART-SELENIUM] Falling back to basic scraper")
+            return self.scrape_jiomart(query)
+        
+        try:
+            logger.info(f"🔍 [JIOMART-SELENIUM] Starting scrape for: {query}")
+            search_url = f"https://www.jiomart.com/search/{quote_plus(query)}"
+            logger.info(f"🌐 [JIOMART-SELENIUM] URL: {search_url}")
+            
+            driver.get(search_url)
+            time.sleep(4)  # Wait for JavaScript to render
+            
+            # Wait for products to load
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '.plp-card-wrapper, .product-card, [data-qa="product"]'))
+                )
+            except TimeoutException:
+                logger.warning("⚠️ [JIOMART-SELENIUM] Product cards not found")
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            # JioMart product selectors
+            products = soup.select('.plp-card-wrapper, .product-card, [data-qa="product"], .jm-col-4, div[class*="product"]')[:5]
+            logger.info(f"🎯 [JIOMART-SELENIUM] Found {len(products)} product containers")
+            
+            for idx, product in enumerate(products[:5], 1):
+                try:
+                    logger.info(f"📦 [JIOMART-SELENIUM] Processing product #{idx}")
+                    
+                    # Extract title
+                    title_elem = product.select_one('.plp-card-details-name, .product-title, span[class*="name"], h3, p[class*="name"]')
+                    title = title_elem.get_text(strip=True) if title_elem else None
+                    
+                    # Extract price
+                    price = None
+                    price_elem = product.select_one('.plp-card-details-price, .product-price, span[class*="price"], span[class*="Price"]')
+                    if price_elem:
+                        price_text = price_elem.get_text(strip=True)
+                        price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                        if price_match:
+                            price = int(price_match.group())
+                    
+                    # Extract URL
+                    link_elem = product.select_one('a')
+                    product_url = None
+                    if link_elem and link_elem.get('href'):
+                        href = link_elem['href']
+                        product_url = urljoin('https://www.jiomart.com', href)
+                    
+                    # Extract image
+                    img_elem = product.select_one('img')
+                    image_url = None
+                    if img_elem:
+                        image_url = img_elem.get('src') or img_elem.get('data-src')
+                    
+                    if title and price:
+                        self.results.append({
+                            'platform': 'JioMart',
+                            'title': title[:100],
+                            'price': price,
+                            'url': product_url,
+                            'image': image_url,
+                            'currency': 'INR',
+                            'availability': 'In Stock'
+                        })
+                        logger.info(f"✅ [JIOMART-SELENIUM] Added: {title[:50]}... at ₹{price}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ [JIOMART-SELENIUM] Error parsing product #{idx}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ [JIOMART-SELENIUM] Error: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_myntra_selenium(self, query):
+        """Scrape Myntra using Selenium for JavaScript-rendered content"""
+        driver = self._get_selenium_driver()
+        if not driver:
+            logger.warning("⚠️ [MYNTRA-SELENIUM] Falling back to basic scraper")
+            return self.scrape_myntra(query)
+        
+        try:
+            logger.info(f"🔍 [MYNTRA-SELENIUM] Starting scrape for: {query}")
+            search_url = f"https://www.myntra.com/{quote_plus(query.replace(' ', '-'))}"
+            logger.info(f"🌐 [MYNTRA-SELENIUM] URL: {search_url}")
+            
+            driver.get(search_url)
+            time.sleep(3)
+            
+            # Wait for products to load
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '.product-base, .product-productMetaInfo, li[class*="product"]'))
+                )
+            except TimeoutException:
+                logger.warning("⚠️ [MYNTRA-SELENIUM] Product cards not found")
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            # Myntra product selectors
+            products = soup.select('.product-base, li[class*="product"], div[class*="product-sliderContainer"]')[:5]
+            logger.info(f"🎯 [MYNTRA-SELENIUM] Found {len(products)} product containers")
+            
+            for idx, product in enumerate(products[:5], 1):
+                try:
+                    logger.info(f"📦 [MYNTRA-SELENIUM] Processing product #{idx}")
+                    
+                    # Extract title (brand + name)
+                    brand_elem = product.select_one('.product-brand, h3[class*="brand"], [class*="brand"]')
+                    name_elem = product.select_one('.product-product, h4[class*="product"], [class*="product-title"]')
+                    
+                    brand = brand_elem.get_text(strip=True) if brand_elem else ''
+                    name = name_elem.get_text(strip=True) if name_elem else ''
+                    title = f"{brand} {name}".strip() if brand or name else None
+                    
+                    # Extract price
+                    price = None
+                    price_elem = product.select_one('.product-discountedPrice, span[class*="discountedPrice"], span[class*="price"]')
+                    if price_elem:
+                        price_text = price_elem.get_text(strip=True)
+                        price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                        if price_match:
+                            price = int(price_match.group())
+                    
+                    # Extract URL
+                    link_elem = product.select_one('a')
+                    product_url = None
+                    if link_elem and link_elem.get('href'):
+                        href = link_elem['href']
+                        product_url = urljoin('https://www.myntra.com', href)
+                    
+                    # Extract image
+                    img_elem = product.select_one('img.img-responsive, img[class*="product"], picture img')
+                    image_url = None
+                    if img_elem:
+                        image_url = img_elem.get('src') or img_elem.get('data-src')
+                    
+                    if title and price:
+                        self.results.append({
+                            'platform': 'Myntra',
+                            'title': title[:100],
+                            'price': price,
+                            'url': product_url,
+                            'image': image_url,
+                            'currency': 'INR',
+                            'availability': 'In Stock'
+                        })
+                        logger.info(f"✅ [MYNTRA-SELENIUM] Added: {title[:50]}... at ₹{price}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ [MYNTRA-SELENIUM] Error parsing product #{idx}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ [MYNTRA-SELENIUM] Error: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_nykaa_selenium(self, query):
+        """Scrape Nykaa using Selenium for JavaScript-rendered content"""
+        driver = self._get_selenium_driver()
+        if not driver:
+            logger.warning("⚠️ [NYKAA-SELENIUM] Falling back to basic scraper")
+            return self.scrape_nykaa(query)
+        
+        try:
+            logger.info(f"🔍 [NYKAA-SELENIUM] Starting scrape for: {query}")
+            search_url = f"https://www.nykaa.com/search/result/?q={quote_plus(query)}"
+            logger.info(f"🌐 [NYKAA-SELENIUM] URL: {search_url}")
+            
+            driver.get(search_url)
+            time.sleep(3)
+            
+            # Wait for products to load
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '.productWrapper, .product-card, [class*="ProductCard"]'))
+                )
+            except TimeoutException:
+                logger.warning("⚠️ [NYKAA-SELENIUM] Product cards not found")
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            # Nykaa product selectors
+            products = soup.select('.productWrapper, .product-card, [class*="ProductCard"], div[class*="product-list"] > div')[:5]
+            logger.info(f"🎯 [NYKAA-SELENIUM] Found {len(products)} product containers")
+            
+            for idx, product in enumerate(products[:5], 1):
+                try:
+                    logger.info(f"📦 [NYKAA-SELENIUM] Processing product #{idx}")
+                    
+                    # Extract title
+                    title_elem = product.select_one('.product-name, .title, [class*="product-title"], span[class*="name"]')
+                    title = title_elem.get_text(strip=True) if title_elem else None
+                    
+                    # Extract price
+                    price = None
+                    price_elem = product.select_one('.post-card__content-price-offer, .price, [class*="price"], span[class*="Price"]')
+                    if price_elem:
+                        price_text = price_elem.get_text(strip=True)
+                        price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                        if price_match:
+                            price = int(price_match.group())
+                    
+                    # Extract URL
+                    link_elem = product.select_one('a')
+                    product_url = None
+                    if link_elem and link_elem.get('href'):
+                        href = link_elem['href']
+                        product_url = urljoin('https://www.nykaa.com', href)
+                    
+                    # Extract image
+                    img_elem = product.select_one('img')
+                    image_url = None
+                    if img_elem:
+                        image_url = img_elem.get('src') or img_elem.get('data-src')
+                    
+                    if title and price:
+                        self.results.append({
+                            'platform': 'Nykaa',
+                            'title': title[:100],
+                            'price': price,
+                            'url': product_url,
+                            'image': image_url,
+                            'currency': 'INR',
+                            'availability': 'In Stock'
+                        })
+                        logger.info(f"✅ [NYKAA-SELENIUM] Added: {title[:50]}... at ₹{price}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ [NYKAA-SELENIUM] Error parsing product #{idx}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ [NYKAA-SELENIUM] Error: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_ajio_selenium(self, query):
+        """Scrape AJIO using Selenium for JavaScript-rendered content"""
+        driver = self._get_selenium_driver()
+        if not driver:
+            logger.warning("⚠️ [AJIO-SELENIUM] Falling back to basic scraper")
+            return self.scrape_ajio(query)
+        
+        try:
+            logger.info(f"🔍 [AJIO-SELENIUM] Starting scrape for: {query}")
+            search_url = f"https://www.ajio.com/search/?text={quote_plus(query)}"
+            logger.info(f"🌐 [AJIO-SELENIUM] URL: {search_url}")
+            
+            driver.get(search_url)
+            time.sleep(4)
+            
+            # Scroll down to load more products
+            driver.execute_script("window.scrollTo(0, 500);")
+            time.sleep(1)
+            
+            # Wait for products to load
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '.item, [class*="product-card"], .rilrtl-products-list__item'))
+                )
+            except TimeoutException:
+                logger.warning("⚠️ [AJIO-SELENIUM] Product cards not found")
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            # AJIO product selectors
+            products = soup.select('.item, [class*="product-card"], .rilrtl-products-list__item, div[class*="product"]')[:5]
+            logger.info(f"🎯 [AJIO-SELENIUM] Found {len(products)} product containers")
+            
+            for idx, product in enumerate(products[:5], 1):
+                try:
+                    logger.info(f"📦 [AJIO-SELENIUM] Processing product #{idx}")
+                    
+                    # Extract title (brand + name)
+                    brand_elem = product.select_one('.brand, [class*="brand"]')
+                    name_elem = product.select_one('.nameCls, [class*="name"]')
+                    
+                    brand = brand_elem.get_text(strip=True) if brand_elem else ''
+                    name = name_elem.get_text(strip=True) if name_elem else ''
+                    title = f"{brand} {name}".strip() if brand or name else None
+                    
+                    # Extract price
+                    price = None
+                    price_elem = product.select_one('.price strong, [class*="price"], span[class*="Price"]')
+                    if price_elem:
+                        price_text = price_elem.get_text(strip=True)
+                        price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                        if price_match:
+                            price = int(price_match.group())
+                    
+                    # Extract URL
+                    link_elem = product.select_one('a')
+                    product_url = None
+                    if link_elem and link_elem.get('href'):
+                        href = link_elem['href']
+                        product_url = urljoin('https://www.ajio.com', href)
+                    
+                    # Extract image
+                    img_elem = product.select_one('img')
+                    image_url = None
+                    if img_elem:
+                        image_url = img_elem.get('src') or img_elem.get('data-src')
+                    
+                    if title and price:
+                        self.results.append({
+                            'platform': 'AJIO',
+                            'title': title[:100],
+                            'price': price,
+                            'url': product_url,
+                            'image': image_url,
+                            'currency': 'INR',
+                            'availability': 'In Stock'
+                        })
+                        logger.info(f"✅ [AJIO-SELENIUM] Added: {title[:50]}... at ₹{price}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ [AJIO-SELENIUM] Error parsing product #{idx}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ [AJIO-SELENIUM] Error: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_tatacliq_selenium(self, query):
+        """Scrape Tata CLiQ using Selenium for JavaScript-rendered content"""
+        driver = self._get_selenium_driver()
+        if not driver:
+            logger.warning("⚠️ [TATACLIQ-SELENIUM] Falling back to basic scraper")
+            return self.scrape_tatacliq(query)
+        
+        try:
+            logger.info(f"🔍 [TATACLIQ-SELENIUM] Starting scrape for: {query}")
+            search_url = f"https://www.tatacliq.com/search/?searchCategory=all&text={quote_plus(query)}"
+            logger.info(f"🌐 [TATACLIQ-SELENIUM] URL: {search_url}")
+            
+            driver.get(search_url)
+            time.sleep(4)
+            
+            # Wait for products to load
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '.ProductModule, .product-card, [class*="ProductItem"]'))
+                )
+            except TimeoutException:
+                logger.warning("⚠️ [TATACLIQ-SELENIUM] Product cards not found")
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            # Tata CLiQ product selectors
+            products = soup.select('.ProductModule, .product-card, [class*="ProductItem"], div[class*="product"]')[:5]
+            logger.info(f"🎯 [TATACLIQ-SELENIUM] Found {len(products)} product containers")
+            
+            for idx, product in enumerate(products[:5], 1):
+                try:
+                    logger.info(f"📦 [TATACLIQ-SELENIUM] Processing product #{idx}")
+                    
+                    # Extract title
+                    title_elem = product.select_one('.ProductDescription__productName, .product-name, span[class*="name"], h3')
+                    title = title_elem.get_text(strip=True) if title_elem else None
+                    
+                    # Extract price
+                    price = None
+                    price_elem = product.select_one('.ProductDescription__priceStrikeContainer, .price, [class*="price"]')
+                    if price_elem:
+                        price_text = price_elem.get_text(strip=True)
+                        price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                        if price_match:
+                            price = int(price_match.group())
+                    
+                    # Extract URL
+                    link_elem = product.select_one('a')
+                    product_url = None
+                    if link_elem and link_elem.get('href'):
+                        href = link_elem['href']
+                        product_url = urljoin('https://www.tatacliq.com', href)
+                    
+                    # Extract image
+                    img_elem = product.select_one('img')
+                    image_url = None
+                    if img_elem:
+                        image_url = img_elem.get('src') or img_elem.get('data-src')
+                    
+                    if title and price:
+                        self.results.append({
+                            'platform': 'Tata CLiQ',
+                            'title': title[:100],
+                            'price': price,
+                            'url': product_url,
+                            'image': image_url,
+                            'currency': 'INR',
+                            'availability': 'In Stock'
+                        })
+                        logger.info(f"✅ [TATACLIQ-SELENIUM] Added: {title[:50]}... at ₹{price}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ [TATACLIQ-SELENIUM] Error parsing product #{idx}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ [TATACLIQ-SELENIUM] Error: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_firstcry_selenium(self, query):
+        """Scrape FirstCry using Selenium for JavaScript-rendered content"""
+        driver = self._get_selenium_driver()
+        if not driver:
+            logger.warning("⚠️ [FIRSTCRY-SELENIUM] Falling back to basic scraper")
+            return self.scrape_firstcry(query)
+        
+        try:
+            logger.info(f"🔍 [FIRSTCRY-SELENIUM] Starting scrape for: {query}")
+            search_url = f"https://www.firstcry.com/search?q={quote_plus(query)}"
+            logger.info(f"🌐 [FIRSTCRY-SELENIUM] URL: {search_url}")
+            
+            driver.get(search_url)
+            time.sleep(3)
+            
+            # Wait for products to load
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, '.product-card, .productBox, [class*="product-listing"]'))
+                )
+            except TimeoutException:
+                logger.warning("⚠️ [FIRSTCRY-SELENIUM] Product cards not found")
+            
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            # FirstCry product selectors
+            products = soup.select('.product-card, .productBox, [class*="product-listing"], div[class*="product"]')[:5]
+            logger.info(f"🎯 [FIRSTCRY-SELENIUM] Found {len(products)} product containers")
+            
+            for idx, product in enumerate(products[:5], 1):
+                try:
+                    logger.info(f"📦 [FIRSTCRY-SELENIUM] Processing product #{idx}")
+                    
+                    # Extract title
+                    title_elem = product.select_one('.product-title, .prod-name, span[class*="name"], h3')
+                    title = title_elem.get_text(strip=True) if title_elem else None
+                    
+                    # Extract price
+                    price = None
+                    price_elem = product.select_one('.final-price, .price, span[class*="price"]')
+                    if price_elem:
+                        price_text = price_elem.get_text(strip=True)
+                        price_match = re.search(r'[\d,]+', price_text.replace(',', ''))
+                        if price_match:
+                            price = int(price_match.group())
+                    
+                    # Extract URL
+                    link_elem = product.select_one('a')
+                    product_url = None
+                    if link_elem and link_elem.get('href'):
+                        href = link_elem['href']
+                        product_url = urljoin('https://www.firstcry.com', href)
+                    
+                    # Extract image
+                    img_elem = product.select_one('img')
+                    image_url = None
+                    if img_elem:
+                        image_url = img_elem.get('src') or img_elem.get('data-src')
+                    
+                    if title and price:
+                        self.results.append({
+                            'platform': 'FirstCry',
+                            'title': title[:100],
+                            'price': price,
+                            'url': product_url,
+                            'image': image_url,
+                            'currency': 'INR',
+                            'availability': 'In Stock'
+                        })
+                        logger.info(f"✅ [FIRSTCRY-SELENIUM] Added: {title[:50]}... at ₹{price}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ [FIRSTCRY-SELENIUM] Error parsing product #{idx}: {e}")
+                    continue
+                    
+        except Exception as e:
+            logger.error(f"❌ [FIRSTCRY-SELENIUM] Error: {e}")
+        
+        self.add_random_delay()
+
+    def scrape_all(self, query, use_selenium=True):
+        """Scrape Indian e-commerce platforms including major sites
+        
+        Args:
+            query: Search query string
+            use_selenium: If True, use Selenium for JavaScript-rendered sites (default: True)
+        """
+        logger.info(f"Starting scrape for query: {query}")
+        logger.info(f"🔧 Selenium mode: {'ENABLED' if use_selenium and SELENIUM_AVAILABLE else 'DISABLED'}")
+        
+        # ==================== MAJOR PLATFORMS ====================
         self.scrape_amazon(query)           # Amazon India - Using mobile headers ✅
         self.scrape_flipkart(query)         # Flipkart - Using mobile headers ✅
         
-        # ACCESSIBLE SITES: Minimal anti-bot protection
+        # ==================== GENERAL MARKETPLACES ====================
+        # Use Selenium-based scrapers for sites with anti-bot protection
+        if use_selenium and SELENIUM_AVAILABLE:
+            self.scrape_meesho_selenium(query)       # Meesho - Selenium ✅
+            self.scrape_jiomart_selenium(query)      # JioMart - Selenium ✅
+        else:
+            self.scrape_meesho(query)               # Meesho - Basic (may be blocked)
+            self.scrape_jiomart(query)              # JioMart - Basic (may be blocked)
+        
+        self.scrape_snapdeal(query)         # Snapdeal - Value marketplace ✅
+        # self.scrape_indiamart(query)      # IndiaMART - B2B (optional) 
+        
+        # ==================== SPECIALIZED PLATFORMS ====================
+        if use_selenium and SELENIUM_AVAILABLE:
+            self.scrape_myntra_selenium(query)       # Myntra - Selenium ✅
+            self.scrape_ajio_selenium(query)         # AJIO - Selenium ✅
+            self.scrape_nykaa_selenium(query)        # Nykaa - Selenium ✅
+            self.scrape_tatacliq_selenium(query)     # Tata CLiQ - Selenium ✅
+            self.scrape_firstcry_selenium(query)     # FirstCry - Selenium ✅
+        else:
+            self.scrape_myntra(query)               # Myntra - Basic (may be blocked)
+            self.scrape_ajio(query)                 # AJIO - Basic (may be blocked)
+            self.scrape_nykaa(query)                # Nykaa - Basic (may be blocked)
+            self.scrape_tatacliq(query)             # Tata CLiQ - Basic (may be blocked)
+            self.scrape_firstcry(query)             # FirstCry - Basic (may be blocked)
+        
+        # ==================== OTHER ACCESSIBLE SITES ====================
         self.scrape_naaptol(query)          # Naaptol - No anti-bot protection ✅
         self.scrape_shopsy(query)           # Shopsy - Flipkart's social commerce ✅
-        self.scrape_snapdeal(query)         # Snapdeal - Sometimes accessible ✅
+        
+        # Close Selenium driver to free resources
+        if use_selenium and SELENIUM_AVAILABLE:
+            self._close_selenium_driver()
         
         # REAL SCRAPING ONLY - No mock data generation
         scraped_count = len(self.results)
         logger.info(f"📊 [SUMMARY] Real scraped results: {scraped_count}")
-        logger.info(f"� [POLICY] Only showing authentic scraped results - no mock/generated data")
+        logger.info(f"📋 [POLICY] Only showing authentic scraped results - no mock/generated data")
         
         if scraped_count == 0:
             logger.warning(f"⚠️ [NO RESULTS] No real products found for '{query}' - try a different search term")
@@ -1198,10 +2555,15 @@ def main():
         sys.exit(1)
     
     query = sys.argv[1]
+    # Check for --selenium flag to enable Selenium (disabled by default for speed)
+    use_selenium = '--selenium' in sys.argv
+    
     scraper = ProductScraper()
     
     try:
-        results = scraper.scrape_all(query)
+        # Disable Selenium by default for web API calls (too slow, causes timeouts)
+        # Use --selenium flag to enable for better results
+        results = scraper.scrape_all(query, use_selenium=use_selenium)
         
         # Format results for Cost Curve frontend
         logger.info(f"🎨 [FORMAT] Formatting {len(results)} results for frontend")
