@@ -28,33 +28,64 @@ ChartJS.register(
 const PriceChart = ({ priceHistory, productName, currentPrice }) => {
   const [timeRange, setTimeRange] = useState('max');
 
-  // Generate realistic price history data spanning 16 months
-  const generatePriceHistory = (basePrice) => {
+  // Generate realistic price history data that converges to the current price
+  const generatePriceHistory = (currentPrice) => {
     const data = [];
-    const startDate = new Date('2024-09-01');
-    const endDate = new Date('2025-12-01');
+    const now = new Date();
+    const startDate = new Date(now);
+    startDate.setMonth(startDate.getMonth() - 6); // 6 months of history
     
-    let price = basePrice || 75000;
-    const currentDate = new Date(startDate);
+    const basePrice = currentPrice || 75000;
     
-    while (currentDate <= endDate) {
-      // Add some realistic price fluctuation
-      const fluctuation = (Math.random() - 0.5) * 0.08 * price;
-      const seasonalFactor = Math.sin(currentDate.getMonth() * Math.PI / 6) * 0.03 * price;
+    // Start price is higher (products typically decrease over time)
+    const startPrice = basePrice * (1.15 + Math.random() * 0.15); // 15-30% higher
+    const priceRange = startPrice - basePrice;
+    
+    const totalDays = Math.floor((now - startDate) / (1000 * 60 * 60 * 24));
+    const dataPoints = Math.floor(totalDays / 3); // One point every 3 days
+    
+    for (let i = 0; i <= dataPoints; i++) {
+      const currentDate = new Date(startDate);
+      currentDate.setDate(currentDate.getDate() + (i * 3));
       
-      // Occasional price drops (sales)
-      const isOnSale = Math.random() < 0.1;
-      const saleDiscount = isOnSale ? price * 0.15 : 0;
+      // Progress from 0 to 1 over the time period
+      const progress = i / dataPoints;
       
-      price = Math.max(price * 0.7, Math.min(price * 1.3, price + fluctuation + seasonalFactor - saleDiscount));
+      // Base trend: gradual decrease towards current price
+      let price = startPrice - (priceRange * progress);
+      
+      // Add realistic fluctuations
+      const fluctuation = (Math.random() - 0.5) * 0.05 * basePrice;
+      
+      // Seasonal variations (higher prices in festive months)
+      const month = currentDate.getMonth();
+      const isFestiveSeason = month === 9 || month === 10 || month === 11; // Oct, Nov, Dec
+      const seasonalFactor = isFestiveSeason ? basePrice * 0.03 : 0;
+      
+      // Random sale events (10% chance)
+      const isOnSale = Math.random() < 0.1 && progress < 0.9; // No sales near the end
+      const saleDiscount = isOnSale ? basePrice * (0.08 + Math.random() * 0.12) : 0;
+      
+      // Add weekend price variations (slight increases on weekends)
+      const dayOfWeek = currentDate.getDay();
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const weekendFactor = isWeekend ? basePrice * 0.02 : 0;
+      
+      // Calculate final price
+      price = price + fluctuation + seasonalFactor + weekendFactor - saleDiscount;
+      
+      // Ensure price stays within reasonable bounds
+      price = Math.max(basePrice * 0.75, Math.min(startPrice * 1.05, price));
+      
+      // For the last data point, ensure it's very close to the current price
+      if (i === dataPoints) {
+        price = basePrice + (Math.random() - 0.5) * basePrice * 0.01; // Within 1% of current
+      }
       
       data.push({
         date: currentDate.toISOString().split('T')[0],
         price: Math.round(price)
       });
-      
-      // Move to next data point (every 3-5 days for more detail)
-      currentDate.setDate(currentDate.getDate() + Math.floor(Math.random() * 3) + 3);
     }
     
     return data;

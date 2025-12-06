@@ -114,7 +114,7 @@ router.post('/', [
       }
     });
 
-    // Timeout after 45 seconds (scraping multiple sites takes time)
+    // Timeout after 90 seconds (scraping multiple sites takes time)
     const timeout = setTimeout(() => {
       python.kill();
       if (!res.headersSent) {
@@ -123,7 +123,7 @@ router.post('/', [
           message: 'Search timeout - please try again with a simpler query'
         });
       }
-    }, 45000);
+    }, 90000);
 
   } catch (error) {
     console.error('Search error:', error);
@@ -236,7 +236,7 @@ router.get('/products', [
       }
     });
 
-    // Timeout after 45 seconds (scraping multiple sites takes time)
+    // Timeout after 90 seconds (scraping multiple sites takes time)
     const timeout = setTimeout(() => {
       python.kill();
       if (!res.headersSent) {
@@ -245,7 +245,7 @@ router.get('/products', [
           message: 'Search timeout - please try again with a simpler query'
         });
       }
-    }, 45000);
+    }, 90000);
 
   } catch (error) {
     console.error('Search route error:', error);

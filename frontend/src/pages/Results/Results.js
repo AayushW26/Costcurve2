@@ -17,10 +17,9 @@ const Results = () => {
   }, [searchResults]);
 
   const maxSavings = React.useMemo(() => {
-    if (!searchResults || searchResults.length === 0) return 0;
-    const prices = searchResults.map(p => p.price || p.totalCost || 0);
-    return Math.max(...prices) - Math.min(...prices);
-  }, [searchResults]);
+    if (!bestDeal || !bestDeal.originalPrice || !bestDeal.price) return 0;
+    return bestDeal.originalPrice - bestDeal.price;
+  }, [bestDeal]);
 
   const inStockCount = React.useMemo(() => {
     if (!searchResults || searchResults.length === 0) return 0;
@@ -28,9 +27,10 @@ const Results = () => {
   }, [searchResults]);
 
   const avgDiscount = React.useMemo(() => {
-    if (!searchResults || searchResults.length === 0) return 0;
-    return Math.round(searchResults.reduce((acc, p) => acc + (p.discount || 0), 0) / searchResults.length);
-  }, [searchResults]);
+    if (!bestDeal || !bestDeal.originalPrice || !bestDeal.price) return 0;
+    const discount = ((bestDeal.originalPrice - bestDeal.price) / bestDeal.originalPrice) * 100;
+    return Math.round(discount);
+  }, [bestDeal]);
 
   // Early returns after all hooks are called
   if (isSearching) {
@@ -103,15 +103,6 @@ const Results = () => {
               <PriceChart 
                 productName={searchResults[0]?.name || searchResults[0]?.title || 'Product'} 
                 currentPrice={searchResults[0]?.price || 134900}
-                priceHistory={[
-                  { date: '2024-01-01', price: 149900 },
-                  { date: '2024-01-15', price: 145000 },
-                  { date: '2024-02-01', price: 142000 },
-                  { date: '2024-02-15', price: 138000 },
-                  { date: '2024-03-01', price: 140000 },
-                  { date: '2024-03-15', price: 136000 },
-                  { date: '2024-04-01', price: searchResults[0]?.price || 134900 }
-                ]}
               />
             </div>
             <div className="deal-score-container">
